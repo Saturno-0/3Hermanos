@@ -48,8 +48,8 @@ def main(page: ft.Page):
         # Ruta /main
         elif page.route == "/main":
             if not page.session.get("empleado_id"):
-                 page.go("/login")
-                 return
+                page.go("/login")
+                return
             page.views.append(MainView(page))
         
         page.update()
