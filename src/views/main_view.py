@@ -279,7 +279,7 @@ class MainView(ft.View):
         )
     
     def _crear_sidebar_vacia(self):
-         return ft.Container(
+        return ft.Container(
             alignment=ft.alignment.top_center,
             expand=3,
             padding=15,
