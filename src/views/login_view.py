@@ -1,6 +1,5 @@
 # login_view.py
 import flet as ft
-from datetime import datetime
 # Debes definir o importar estas funciones
 # from utils import validar_empleado, show_modal_nuevo_empleado 
 
@@ -21,19 +20,39 @@ class LoginView(ft.View):
         # 1. Configuración de la vista
         super().__init__(
             route="/login",
-            padding=0, 
+            padding=0
             # El bgcolor se establece en el contenedor 'cover' o 'form' si se desea un color por vista
         )
         self.page = page
 
         # 2. Controles interactivos (Necesitan ser atributos para acceder a sus valores)
-        self.codigo_input = ft.TextField(label="Ingrese su nombre", filled=True, autofocus=True,border_color='#EBEBEB', border_radius=7)
-        self.password_input = ft.TextField(label="Ingrese su contraseña", password=True, can_reveal_password=True, filled=True, border_color='#EBEBEB', border_radius=7)
+        nombre_input = ft.TextField(
+            label="Nombre",
+            width=300,
+            border_color="#C4A484",
+            border_radius=30,
+            border_width=1.5,
+            focused_border_color="#A47C5A",
+            text_style=ft.TextStyle(color="#5C4033"),
+            label_style=ft.TextStyle(color="#C4A484")
+        )
+        password_input = ft.TextField(
+            label="Contraseña",
+            password=True,
+            can_reveal_password=True,
+            width=300,
+            border_color="#C4A484",
+            border_radius=30,
+            border_width=1.5,
+            focused_border_color="#A47C5A",
+            text_style=ft.TextStyle(color="#5C4033"),
+            label_style=ft.TextStyle(color="#C4A484")
+        )
         self.error_text = ft.Text(color="red", visible=False)
         
         # 3. Lógica de inicio de sesión
         def on_login(e):
-            empleado = validar_empleado(self.codigo_input.value, self.password_input.value)
+            empleado = validar_empleado(self.nombre_input.value, self.password_input.value)
             if empleado:
                 self.page.session.set("empleado_id", empleado[0])
                 self.page.session.set("empleado_nombre", empleado[1]) 
@@ -45,60 +64,94 @@ class LoginView(ft.View):
 
         # 4. Estructura de la interfaz
         cover = ft.Container(
-            height=page.height * 2,
-            padding=100,
-            expand=True,
-            bgcolor='#FFF1F4',
-            content= ft.Image (src="Logo.png")
+            expand=1, # Hace que el contenedor ocupe todo el espacio disponible
+            content=ft.Image(
+                src="icon.png",
+                fit=ft.ImageFit.COVER,  # Ajusta la imagen para cubrir todo el contenedor
+            )
         )
         
         form = ft.Container(
+            bgcolor='#FFFFFF',
             content = ft.Column(
-                alignment=ft.MainAxisAlignment.SPACE_EVENLY,
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=15, # Espacio vertical entre elementos
                 controls=[
-                    ft.Text("Inicio de sesión", size=32, weight=ft.FontWeight.BOLD),
-                    ft.Row(
-                        [ft.Text(datetime.now().strftime("%d/%m/%y"),size=16, weight=ft.FontWeight.BOLD)],
-                    alignment=ft.MainAxisAlignment.END
+                    # Asumiendo que 'logo.png' está en una carpeta 'assets'
+                    # Si no, cambia la ruta a solo "logo.png"
+                    ft.Image(src="logo.png", width=150, height=150),
+                    
+                    ft.Text(
+                        "Joyería 3 Hermanos", 
+                        size=32, 
+                        weight=ft.FontWeight.W_500,
+                        color="#8D8D8D" # Un color gris como en la imagen
                     ),
-                    ft.Text("Identificador",size=25),
-                    self.codigo_input,
-                    ft.Text("Contraseña",size=25),
-                    self.password_input,
-                    self.error_text,
-                    ft.Container( 
-                        content= ft.FilledButton("Iniciar Sesion",
-                            bgcolor='#FFCDFA', 
-                            style=ft.ButtonStyle(
-                                shape=ft.RoundedRectangleBorder(radius=7),
-                                text_style=ft.TextStyle(size=20)
-                            ),
-                            height=50,
-                            width=700,
-                            color=ft.Colors.BLACK,
-                            on_click=on_login
-                        ), 
+
+                    # Un pequeño espacio
+                    ft.Container(height=20),
+                    
+                    ft.Text(
+                        "Bienvenido.",
+                        size=38, 
+                        weight=ft.FontWeight.BOLD,
+                        color="#BC9475" # Color café claro
                     ),
-                    ft.ElevatedButton(
-                        "Nuevo usuario",
+                    
+                    ft.Text(
+                        "Por favor, inicia sesión o regístrate\ncomo empleado para continuar",
+                        size=14,
+                        color="#B0B0B0", # Gris más claro
+                        text_align=ft.TextAlign.CENTER
+                    ),
+
+                    # Otro espacio
+                    ft.Container(height=20),
+
+                    nombre_input,
+                    password_input,
+
+                    # Espacio antes del botón
+                    ft.Container(height=10),
+
+                    # Botón de Iniciar Sesión
+                    ft.FilledButton(
+                        "Iniciar Sesión",
+                        width=300,
+                        height=50,
+                        on_click=on_login,
                         style=ft.ButtonStyle(
-                            bgcolor='#FFCDFA',
-                            color=ft.Colors.BLACK,
-                            shape=ft.RoundedRectangleBorder(radius=7)
-                        ),
-                        on_click= lambda e: show_modal_nuevo_empleado(self.page)
+                            bgcolor="#C4A484", # Color café del botón
+                            shape=ft.RoundedRectangleBorder(radius=30), # Totalmente redondeado
+                            color="white" # Color del texto
+                        )
                     ),
-                    ft.Divider(),
-                    ft.Row([ft.Text("ó",size=17)], alignment=ft.MainAxisAlignment.CENTER),
-                    ft.Row([ft.Text("Escanea tu gafete",size=25)], alignment=ft.MainAxisAlignment.CENTER),
-                    ft.Row([ft.Icon(ft.Icons.BARCODE_READER, size=100,color='black')], alignment=ft.MainAxisAlignment.CENTER)
-                ], 
+                    
+                    # Texto para registrarse
+                    ft.Row(
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        controls=[
+                            ft.Text("¿Aun no tienes una cuenta?", size=12, color=ft.colors.GREY),
+                            # Hacemos que "Regístrate aqui" parezca un enlace
+                            ft.TextButton(
+                                "Regístrate aqui", 
+                                style=ft.ButtonStyle(
+                                    padding=ft.padding.only(left=5),
+                                ),
+                                # Aquí puedes agregar una función on_click para el registro
+                                # on_click=lambda e: print("Ir a registro")
+                            )
+                        ]
+                    )
+                ]
             ),
+            expand=True,
             padding=30,
-            expand=True
         ) 
         
         # 5. Asignar los controles a la vista
         self.controls.append(
-            ft.Row([cover, form], expand=True)
+
+            ft.Row([cover, form], expand=True, spacing=0)
         )
