@@ -65,4 +65,4 @@ def main(page: ft.Page):
     page.go("/login")
 
 # Inicia la aplicación. Asegúrate de que el path a assets_dir sea correcto si lo ejecutas desde afuera de src.
-ft.app(target=main, assets_dir="src/assets")
+ft.app(target=main, assets_dir="assets")
