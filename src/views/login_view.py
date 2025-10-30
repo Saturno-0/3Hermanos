@@ -3,7 +3,6 @@ import flet as ft
 # Debes definir o importar estas funciones
 # from utils import validar_empleado, show_modal_nuevo_empleado 
 
-# NOTA: Simulaciones de funciones que DEBES implementar o importar
 def validar_empleado(codigo, password):
     # Lógica de validación real
     return (1, "Empleado de Ejemplo") if codigo == "test" and password == "123" else None
@@ -62,7 +61,6 @@ class LoginView(ft.View):
                 self.error_text.visible = True
                 self.page.update()
 
-        # 4. Estructura de la interfaz
         cover = ft.Container(
             expand=True, # Hace que el contenedor ocupe todo el espacio disponible
             content=ft.Image(
@@ -85,7 +83,7 @@ class LoginView(ft.View):
                     ft.Text(
                         "Joyería 3 Hermanos", 
                         size=58, 
-                        weight=ft.FontWeight.W_500,
+                        font_family="Poppins Bold",
                         color="#8D8D8D" # Un color gris como en la imagen
                     ),
                     ft.Text(

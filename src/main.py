@@ -11,6 +11,11 @@ def main(page: ft.Page):
     page.title = "Sistema de Punto de Venta"
     page.theme_mode = ft.ThemeMode.LIGHT
 
+    page.fonts = {
+        "Poppins": "Poppins-Regular.ttf",
+        "Poppins Bold": "Poppins-Bold.ttf",  # Agrega la fuente Poppins en negrita
+    }
+
     # --- Diálogo de Confirmación de Cierre de Ventana ---
     def no_click(e):
         page.close(confirm_dialog)
