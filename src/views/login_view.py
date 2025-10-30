@@ -26,26 +26,26 @@ class LoginView(ft.View):
         self.page = page
 
         # 2. Controles interactivos (Necesitan ser atributos para acceder a sus valores)
-        nombre_input = ft.TextField(
+        self.nombre_input = ft.TextField(
             label="Nombre",
             width=300,
+            height=40,
             border_color="#C4A484",
             border_radius=30,
             border_width=1.5,
             focused_border_color="#A47C5A",
-            text_style=ft.TextStyle(color="#5C4033"),
             label_style=ft.TextStyle(color="#C4A484")
         )
-        password_input = ft.TextField(
+        self.password_input = ft.TextField(
             label="Contraseña",
             password=True,
             can_reveal_password=True,
             width=300,
+            height=40,
             border_color="#C4A484",
             border_radius=30,
             border_width=1.5,
             focused_border_color="#A47C5A",
-            text_style=ft.TextStyle(color="#5C4033"),
             label_style=ft.TextStyle(color="#C4A484")
         )
         self.error_text = ft.Text(color="red", visible=False)
@@ -64,7 +64,7 @@ class LoginView(ft.View):
 
         # 4. Estructura de la interfaz
         cover = ft.Container(
-            expand=1, # Hace que el contenedor ocupe todo el espacio disponible
+            expand=True, # Hace que el contenedor ocupe todo el espacio disponible
             content=ft.Image(
                 src="icon.png",
                 fit=ft.ImageFit.COVER,  # Ajusta la imagen para cubrir todo el contenedor
@@ -76,50 +76,45 @@ class LoginView(ft.View):
             content = ft.Column(
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=15, # Espacio vertical entre elementos
+                spacing=5, # Espacio vertical entre elementos
                 controls=[
                     # Asumiendo que 'logo.png' está en una carpeta 'assets'
                     # Si no, cambia la ruta a solo "logo.png"
-                    ft.Image(src="logo.png", width=150, height=150),
+                    ft.Image(src="logo.png", width=300),
                     
                     ft.Text(
                         "Joyería 3 Hermanos", 
-                        size=32, 
+                        size=58, 
                         weight=ft.FontWeight.W_500,
                         color="#8D8D8D" # Un color gris como en la imagen
                     ),
-
-                    # Un pequeño espacio
-                    ft.Container(height=20),
-                    
                     ft.Text(
                         "Bienvenido.",
-                        size=38, 
+                        size=58, 
                         weight=ft.FontWeight.BOLD,
                         color="#BC9475" # Color café claro
                     ),
                     
                     ft.Text(
                         "Por favor, inicia sesión o regístrate\ncomo empleado para continuar",
-                        size=14,
-                        color="#B0B0B0", # Gris más claro
+                        size=15,
+                        color="#C4A484", # Gris más claro
                         text_align=ft.TextAlign.CENTER
                     ),
 
-                    # Otro espacio
-                    ft.Container(height=20),
+                    ft.Container(height=5),
 
-                    nombre_input,
-                    password_input,
+                    self.nombre_input,
+                    self.password_input,
 
                     # Espacio antes del botón
-                    ft.Container(height=10),
+                    ft.Container(height=5),
 
                     # Botón de Iniciar Sesión
                     ft.FilledButton(
                         "Iniciar Sesión",
                         width=300,
-                        height=50,
+                        height=30,
                         on_click=on_login,
                         style=ft.ButtonStyle(
                             bgcolor="#C4A484", # Color café del botón
@@ -132,7 +127,7 @@ class LoginView(ft.View):
                     ft.Row(
                         alignment=ft.MainAxisAlignment.CENTER,
                         controls=[
-                            ft.Text("¿Aun no tienes una cuenta?", size=12, color=ft.colors.GREY),
+                            ft.Text("¿Aun no tienes una cuenta?", size=12, color=ft.Colors.GREY),
                             # Hacemos que "Regístrate aqui" parezca un enlace
                             ft.TextButton(
                                 "Regístrate aqui", 

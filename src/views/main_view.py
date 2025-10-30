@@ -171,7 +171,7 @@ class MainView(ft.View):
             self.sale.actualizar_cantidad(producto_id, nueva_cantidad)
             self.actualizar_sidebar()
         except ValueError:
-             # Si no es número, se ignora
+            # Si no es número, se ignora
             pass
             
     def _on_filter_selected(self, e):
@@ -188,9 +188,6 @@ class MainView(ft.View):
         
         self.actualizar_lista_productos(search_value, criterio)
         self.page.update()
-
-
-    # --- Lógica de Construcción de UI (Sub-componentes) ---
     
     def _crear_producto_tile(self, producto):
         # Función para agregar un producto al carrito y actualizar la sidebar
@@ -395,7 +392,7 @@ class MainView(ft.View):
         self.sidebar.update()
 
     # --- Construcción de la Interfaz Completa ---
-
+    
     def _construir_interfaz(self):
         # AppBar
         appbar = ft.AppBar(
