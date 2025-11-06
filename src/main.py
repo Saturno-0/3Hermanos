@@ -13,7 +13,10 @@ def main(page: ft.Page):
 
     page.fonts = {
         "Poppins": "Poppins-Regular.ttf",
-        "Poppins Bold": "Poppins-Bold.ttf",  # Agrega la fuente Poppins en negrita
+        "Poppins Medium": "Poppins-Medium.ttf",
+        "Poppins Bold": "Poppins-Bold.ttf",
+        "Figtree Medium": "Figtree-Medium.ttf",
+        "Inter Regular" : "Inter_18pt-Regular.ttf"
     }
 
     # --- Diálogo de Confirmación de Cierre de Ventana ---

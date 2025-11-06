@@ -1,11 +1,6 @@
 # login_view.py
 import flet as ft
-# Debes definir o importar estas funciones
-# from utils import validar_empleado, show_modal_nuevo_empleado 
-
-def validar_empleado(codigo, password):
-    # Lógica de validación real
-    return (1, "Empleado de Ejemplo") if codigo == "test" and password == "123" else None
+from database.manager import validar_empleado
 
 def show_modal_nuevo_empleado(page):
     # Lógica para mostrar el modal de nuevo empleado
@@ -13,14 +8,12 @@ def show_modal_nuevo_empleado(page):
     page.snack_bar.open = True
     page.update()
 
-
 class LoginView(ft.View):
     def __init__(self, page: ft.Page):
         # 1. Configuración de la vista
         super().__init__(
             route="/login",
             padding=0
-            # El bgcolor se establece en el contenedor 'cover' o 'form' si se desea un color por vista
         )
         self.page = page
 
@@ -33,7 +26,7 @@ class LoginView(ft.View):
             border_radius=30,
             border_width=1.5,
             focused_border_color="#A47C5A",
-            label_style=ft.TextStyle(color="#C4A484")
+            label_style=ft.TextStyle(size=10, color="#C4A484")
         )
         self.password_input = ft.TextField(
             label="Contraseña",
@@ -60,11 +53,11 @@ class LoginView(ft.View):
                 self.error_text.value = "Credenciales incorrectas"
                 self.error_text.visible = True
                 self.page.update()
-
+        
         cover = ft.Container(
             expand=True, # Hace que el contenedor ocupe todo el espacio disponible
             content=ft.Image(
-                src="icon.png",
+                src="bg.png",
                 fit=ft.ImageFit.COVER,  # Ajusta la imagen para cubrir todo el contenedor
             )
         )
