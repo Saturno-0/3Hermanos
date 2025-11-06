@@ -7,16 +7,17 @@ from views.main_view import MainView
 def main(page: ft.Page):
     # --- Configuración Inicial de la Página ---
     page.window.alignment = ft.alignment.center
+    page.window.maximized = True
     page.window.icon = "Icon.ico"
     page.title = "Sistema de Punto de Venta"
     page.theme_mode = ft.ThemeMode.LIGHT
 
     page.fonts = {
-        "Poppins": "Poppins-Regular.ttf",
-        "Poppins Medium": "Poppins-Medium.ttf",
-        "Poppins Bold": "Poppins-Bold.ttf",
-        "Figtree Medium": "Figtree-Medium.ttf",
-        "Inter Regular" : "Inter_18pt-Regular.ttf"
+        "Poppins": "Poppins/Poppins-Regular.ttf",
+        "Poppins Medium": "Poppins/Poppins-Medium.ttf",
+        "Poppins Bold": "Poppins/Poppins-Bold.ttf",
+        "Figtree Medium": "Figtree/static/Figtree-Medium.ttf",
+        "Inter" : "Inter/static/Inter_18pt-Regular.ttf"
     }
 
     # --- Diálogo de Confirmación de Cierre de Ventana ---
