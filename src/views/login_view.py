@@ -1,8 +1,8 @@
-# login_view.py
+# views/login_view.py
 import flet as ft
+# Usamos la lógica real de la base de datos
 from database.manager import validar_empleado
 from modals.modal_registro import show_modal_nuevo_empleado
-
 
 class LoginView(ft.View):
     def __init__(self, page: ft.Page):
@@ -13,9 +13,7 @@ class LoginView(ft.View):
         )
         self.page = page
 
-
-
-        # 2. Controles interactivos (Necesitan ser atributos para acceder a sus valores)
+        # 2. Controles interactivos
         self.nombre_input = ft.TextField(
             label="Nombre",
             width=300,
@@ -40,23 +38,31 @@ class LoginView(ft.View):
         )
         self.error_text = ft.Text(color="red", visible=False)
         
-        # 3. Lógica de inicio de sesión
+        # 3. Lógica de inicio de sesión (REAL)
         def on_login(e):
+            
+            # Usamos la función real de la base de datos
             empleado = validar_empleado(self.nombre_input.value, self.password_input.value)
+            
             if empleado:
-                self.page.session.set("empleado_nombre", empleado[0])
-                self.page.session.set("empleado_password", empleado[1]) 
-                self.page.go("/main_view")
+                
+                self.page.session.set("empleado_id", empleado[0]) 
+                
+                self.page.session.set("empleado_nombre", empleado[1]) 
+                
+                self.page.go("/main") 
             else:
                 self.error_text.value = "Credenciales incorrectas"
                 self.error_text.visible = True
                 self.page.update()
         
+        # --- El resto de tu layout (está perfecto) ---
+        
         cover = ft.Container(
-            expand=True, # Hace que el contenedor ocupe todo el espacio disponible
+            expand=True, 
             content=ft.Image(
                 src="bg.png",
-                fit=ft.ImageFit.COVER,  # Ajusta la imagen para cubrir todo el contenedor
+                fit=ft.ImageFit.COVER, 
             )
         )
         
@@ -68,7 +74,6 @@ class LoginView(ft.View):
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 controls=[
                     ft.Image(src="logo.png", width=300),
-                    
                     ft.Text(
                         "Joyería 3 Hermanos", 
                         size=64, 
@@ -81,42 +86,32 @@ class LoginView(ft.View):
                         font_family="Figtree Medium",
                         color="#BC9475"
                     ),
-                    
                     ft.Text(
                         "Por favor, inicia sesión o regístrate\ncomo empleado para continuar",
                         size=15,
                         font_family="Poppins Medium",
-                        color="#C4A484", # Gris más claro
+                        color="#C4A484", 
                         text_align=ft.TextAlign.CENTER
                     ),
-
                     ft.Container(height=5),
-
                     self.nombre_input,
                     self.password_input,
-
-                    # Espacio antes del botón
                     ft.Container(height=5),
-
-                    # Botón de Iniciar Sesión
                     ft.FilledButton(
                         "Iniciar Sesión",
                         width=300,
                         height=40,
                         on_click=on_login,
                         style=ft.ButtonStyle(
-                            bgcolor="#C4A484", # Color café del botón
-                            shape=ft.RoundedRectangleBorder(radius=30), # Totalmente redondeado
+                            bgcolor="#C4A484", 
+                            shape=ft.RoundedRectangleBorder(radius=30),
                             color="white"
                         )
                     ),
-                    
-                    # Texto para registrarse
                     ft.Row(
                         alignment=ft.MainAxisAlignment.CENTER,
                         controls=[
                             ft.Text("¿Aun no tienes una cuenta?",font_family="Inter", size=12, color=ft.Colors.GREY),
-                            # Hacemos que "Regístrate aqui" parezca un enlace
                             ft.TextButton(
                                 "Regístrate aqui", 
                                 style=ft.ButtonStyle(
@@ -133,8 +128,6 @@ class LoginView(ft.View):
             padding=30,
         ) 
         
-        # 5. Asignar los controles a la vista
         self.controls.append(
-
             ft.Row([cover, form], expand=True, spacing=0)
         )
