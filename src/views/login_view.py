@@ -15,6 +15,7 @@ class LoginView(ft.View):
 
         # 2. Controles interactivos
         self.nombre_input = ft.TextField(
+            autofocus=True,
             label="Nombre",
             width=300,
             height=40,
@@ -56,8 +57,6 @@ class LoginView(ft.View):
                 self.error_text.visible = True
                 self.page.update()
         
-        # --- El resto de tu layout (está perfecto) ---
-        
         cover = ft.Container(
             expand=True, 
             content=ft.Image(
@@ -96,6 +95,7 @@ class LoginView(ft.View):
                     ft.Container(height=5),
                     self.nombre_input,
                     self.password_input,
+                    self.error_text,
                     ft.Container(height=5),
                     ft.FilledButton(
                         "Iniciar Sesión",

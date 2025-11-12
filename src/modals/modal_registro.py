@@ -108,7 +108,7 @@ def show_modal_nuevo_empleado(page):
         actions=[
             ft.ElevatedButton(
                 "Registrar",
-                bgcolor='#FFCDFA',
+                bgcolor='#C4A484',
                 color="black",
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=7)),
                 on_click=guardar_empleado
