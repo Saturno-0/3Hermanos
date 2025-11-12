@@ -10,9 +10,10 @@ def crear_tablas():
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS productos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clave TEXT UNIQUE NOT NULL,
         nombre TEXT NOT NULL,
         peso REAL NOT NULL,
-        descripcion TEXT NOT NULL,
+        kilataje INTEGER NOT NULL,
         categoria TEXT NOT NULL
     )
     ''')
@@ -102,19 +103,27 @@ def obtener_productos():
     conexion.close()
     return productos
 
-def agregar_producto(nombre, peso, descripcion, categoria):
+def obtener_producto_por_clave(clave):
     """
-    Agrega un nuevo producto.
-    Las columnas 'marca', 'precio', 'cantidad' y 'codigo_barras' 
-    fueron reemplazadas por 'peso' y 'descripcion' para coincidir con la tabla.
+    Obtiene un producto por su clave.
+    Cambiado de 'obtener_producto_por_barcode' a 'obtener_producto_por_clave'.
     """
+    conexion = sqlite3.connect('inventario_joyeria.db')
+    cursor = conexion.cursor()
+    cursor.execute("SELECT * FROM productos WHERE clave = ?", (clave,))
+    producto = cursor.fetchone()
+    conexion.close()
+    return producto
+
+def agregar_producto(clave, nombre, peso, kilataje, categoria):
+    
     conexion = sqlite3.connect('inventario_joyeria.db')
     cursor = conexion.cursor()
     try:
         cursor.execute('''
-            INSERT INTO productos (nombre, peso, descripcion, categoria)
-            VALUES (?, ?, ?, ?)
-        ''', (nombre, peso, descripcion, categoria))
+            INSERT INTO productos (clave, nombre, peso, kilataje, categoria)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (clave, nombre, peso, kilataje, categoria))
         conexion.commit()
         return True
     except sqlite3.IntegrityError:
@@ -122,20 +131,20 @@ def agregar_producto(nombre, peso, descripcion, categoria):
     finally:
         conexion.close()
 
-def actualizar_producto(id_producto, nombre, peso, descripcion, categoria):
+def actualizar_producto(id_producto, clave, nombre, peso, kilataje, categoria):
     """
     Actualiza un producto existente.
     Las columnas 'marca', 'precio', 'cantidad' y 'codigo_barras' 
-    fueron reemplazadas por 'peso' y 'descripcion' para coincidir con la tabla.
+    fueron reemplazadas por 'peso' y 'kilataje' para coincidir con la tabla.
     """
     conexion = sqlite3.connect('inventario_joyeria.db')
     cursor = conexion.cursor()
     try:
         cursor.execute('''
             UPDATE productos 
-            SET nombre=?, peso=?, descripcion=?, categoria=?
+            SET clave=? nombre=?, peso=?, kilataje=?, categoria=?
             WHERE id=?
-        ''', (nombre, peso, descripcion, categoria, id_producto))
+        ''', (clave, nombre, peso, kilataje, categoria, id_producto))
         conexion.commit()
         return True
     except sqlite3.IntegrityError:
@@ -143,29 +152,16 @@ def actualizar_producto(id_producto, nombre, peso, descripcion, categoria):
     finally:
         conexion.close()
 
-def obtener_producto_por_id(id_producto):
-    """
-    Obtiene un producto por su ID.
-    Cambiado de 'obtener_producto_por_barcode' a 'obtener_producto_por_id'.
-    """
-    conexion = sqlite3.connect('inventario_joyeria.db')
-    cursor = conexion.cursor()
-    cursor.execute("SELECT * FROM productos WHERE id = ?", (id_producto,))
-    producto = cursor.fetchone()
-    conexion.close()
-    return producto
-
-
 def obtener_inventario_actual():
     """
     Obtiene el inventario actual de productos.
-    Se ajustaron las columnas a 'peso' y 'descripcion'.
+    Se ajustaron las columnas a 'peso' y 'kilataje'.
     """
     conexion = sqlite3.connect('inventario_joyeria.db')
     cursor = conexion.cursor()
     
     cursor.execute('''
-        SELECT id, nombre, peso, descripcion, categoria
+        SELECT id, clave, nombre, peso, kilataje, categoria
         FROM productos 
         ORDER BY nombre
     ''')
@@ -277,7 +273,7 @@ def obtener_ventas_del_dia():
 def obtener_detalle_venta(venta_id):
     """
     Obtiene los detalles de una venta específica.
-    Se cambió 'p.marca' por 'p.descripcion'.
+    Se cambió 'p.marca' por 'p.kilataje'.
     
     Args:
         venta_id: ID de la venta
@@ -289,7 +285,7 @@ def obtener_detalle_venta(venta_id):
     cursor = conexion.cursor()
     
     cursor.execute('''
-        SELECT p.nombre, p.descripcion, dv.cantidad, dv.precio_unitario, (dv.cantidad * dv.precio_unitario) as subtotal
+        SELECT p.nombre, p.kilataje, dv.cantidad, dv.precio_unitario, (dv.cantidad * dv.precio_unitario) as subtotal
         FROM detalles_venta dv
         JOIN productos p ON dv.producto_id = p.id
         WHERE dv.venta_id = ?
@@ -375,19 +371,19 @@ def exportar_inventario_csv():
         Datos de inventario formateados para CSV
     """
     # Obtenemos el inventario actual
-    inventario = obtener_inventario_actual() # (id, nombre, peso, descripcion, categoria)
+    inventario = obtener_inventario_actual() # (id, nombre, peso, kilataje, categoria)
     
     # Cabecera para el CSV (ajustada)
-    datos_csv = [["ID", "Producto", "Peso", "Descripcion", "Categoría"]]
+    datos_csv = [["ID", "Producto", "Peso", "Kilataje", "Categoría"]]
     
     # Añadimos cada producto (ajustado)
     for producto in inventario:
         datos_csv.append([
-            str(producto[0]), # ID
-            producto[1],       # Producto (nombre)
-            str(producto[2]), # Peso
-            producto[3],       # Descripcion
-            producto[4]        # Categoría
+            str(producto[0]),   # ID
+            producto[1],        # Producto (nombre)
+            str(producto[2]),   # Peso
+            str(producto[3]),   # Kilataje
+            producto[4]         # Categoría
         ])
     
     return datos_csv
