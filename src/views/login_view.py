@@ -16,17 +16,17 @@ class LoginView(ft.View):
         # 2. Controles interactivos
         self.nombre_input = ft.TextField(
             autofocus=True,
-            label="Nombre",
+            hint_text="Nombre",
             width=300,
             height=40,
             border_color="#C4A484",
             border_radius=30,
             border_width=1.5,
             focused_border_color="#A47C5A",
-            label_style=ft.TextStyle(font_family="Inter", color="#C4A484")
+            hint_style=ft.TextStyle(font_family="Inter", color="#C4A484")
         )
         self.password_input = ft.TextField(
-            label="Contraseña",
+            hint_text="Contraseña",
             password=True,
             can_reveal_password=True,
             width=300,
@@ -35,7 +35,7 @@ class LoginView(ft.View):
             border_radius=30,
             border_width=1.5,
             focused_border_color="#A47C5A",
-            label_style=ft.TextStyle(font_family="Inter", color="#C4A484")
+            hint_style=ft.TextStyle(font_family="Inter", color="#C4A484")
         )
         self.error_text = ft.Text(color="red", visible=False)
         
@@ -75,7 +75,7 @@ class LoginView(ft.View):
                     ft.Image(src="logo.png", width=300),
                     ft.Text(
                         "Joyería 3 Hermanos", 
-                        size=64, 
+                        size=58, 
                         font_family="Poppins",
                         color="#8D8D8D"
                     ),

@@ -4,15 +4,23 @@ from database.manager import agregar_producto, actualizar_producto, obtener_prod
 
 def show_modal_editar_producto(page, actualizar_lista_callback):
     # Campos del formulario
-    busqueda_clave = ft.TextField(
-        label="Busqueda Por Clave",
-        on_blur=lambda e: buscar_producto(e.control.value, page)
+    busqueda_clave = ft.Container(
+        bgcolor="#CCCCCC",
+        height=45,
+        border_radius=20,
+        content=ft.TextField(
+            border=ft.InputBorder.NONE,
+            icon  = ft.Icons.SEARCH,
+            hint_style=ft.TextStyle(font_family="Inter", size=14),
+            hint_text="Busca el producto por clave",
+            on_change=lambda e: buscar_producto(e.control.value, page)
+        )
     )
-    clave = ft.TextField(label="Clave")
-    nombre = ft.TextField(label="Nombre", autofocus=True)
-    peso = ft.TextField(label="Peso", keyboard_type="number")
+    clave = ft.TextField(hint_text="Clave")
+    nombre = ft.TextField(hint_text="Nombre", autofocus=True)
+    peso = ft.TextField(hint_text="Peso", keyboard_type="number", suffix_text="/gr")
     kilataje = ft.Dropdown(
-        label="Kilataje",
+        hint_text="Kilataje",
         options=[
             ft.dropdown.Option("10k"),
             ft.dropdown.Option("14k"),
@@ -78,13 +86,7 @@ def show_modal_editar_producto(page, actualizar_lista_callback):
 
     def guardar_producto(e):
         nonlocal producto_actual
-        try:
-            peso_val = float(peso.value)
-        except ValueError:
-            error_text.value = "Peso y debe ser un numero válido"
-            error_text.visible = True
-            page.update()
-            return
+        
         
         if not all([clave.value, nombre.value, peso.value, kilataje.value, categoria.value]):
             error_text.value = "Todos los campos son obligatorios"
@@ -97,7 +99,7 @@ def show_modal_editar_producto(page, actualizar_lista_callback):
                 producto_actual[0],
                 clave.value,
                 nombre.value,
-                peso_val,
+                peso.value,
                 kilataje.value,
                 categoria.value
             )
@@ -105,7 +107,7 @@ def show_modal_editar_producto(page, actualizar_lista_callback):
             success = agregar_producto(
                 clave.value,
                 nombre.value,
-                peso_val,
+                peso.value,
                 kilataje.value,
                 categoria.value,
             )
@@ -153,7 +155,8 @@ def show_modal_editar_producto(page, actualizar_lista_callback):
         modal=True,
         title=ft.Column([
             ft.Text("Crear/Editar Producto"),
-            busqueda_clave
+            busqueda_clave,
+            ft.Divider(height=10)
         ]),
         content=ft.Column(
             controls=[
