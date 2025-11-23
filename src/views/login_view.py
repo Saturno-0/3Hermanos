@@ -1,8 +1,8 @@
 # views/login_view.py
 import flet as ft
-# Usamos la lógica real de la base de datos
 from database.manager import validar_empleado
 from modals.modal_registro import show_modal_nuevo_empleado
+import logging
 
 class LoginView(ft.View):
     def __init__(self, page: ft.Page):
@@ -25,6 +25,7 @@ class LoginView(ft.View):
             focused_border_color="#A47C5A",
             hint_style=ft.TextStyle(font_family="Inter", color="#C4A484")
         )
+        
         self.password_input = ft.TextField(
             hint_text="Contraseña",
             password=True,
@@ -37,26 +38,10 @@ class LoginView(ft.View):
             focused_border_color="#A47C5A",
             hint_style=ft.TextStyle(font_family="Inter", color="#C4A484")
         )
-        self.error_text = ft.Text(color="red", visible=False)
         
-        # 3. Lógica de inicio de sesión (REAL)
-        def on_login(e):
-            
-            # Usamos la función real de la base de datos
-            empleado = validar_empleado(self.nombre_input.value, self.password_input.value)
-            
-            if empleado:
-                
-                self.page.session.set("empleado_id", empleado[0]) 
-                
-                self.page.session.set("empleado_nombre", empleado[1]) 
-                
-                self.page.go("/main") 
-            else:
-                self.error_text.value = "Credenciales incorrectas"
-                self.error_text.visible = True
-                self.page.update()
+        self.error_text = ft.Text(color="red", visible=False, size=14)
         
+        # 3. Construcción del Layout
         cover = ft.Container(
             expand=True, 
             content=ft.Image(
@@ -101,7 +86,7 @@ class LoginView(ft.View):
                         "Iniciar Sesión",
                         width=300,
                         height=40,
-                        on_click=on_login,
+                        on_click=self.login, 
                         style=ft.ButtonStyle(
                             bgcolor="#C4A484", 
                             shape=ft.RoundedRectangleBorder(radius=30),
@@ -128,6 +113,53 @@ class LoginView(ft.View):
             padding=30,
         ) 
         
-        self.controls.append(
+        self.controls = [
             ft.Row([cover, form], expand=True, spacing=0)
-        )
+        ]
+
+    def login(self, e):
+        """
+        Maneja la lógica de autenticación y guardado de sesión.
+        """
+        usuario = self.nombre_input.value.strip() # Quitamos espacios extra
+        password = self.password_input.value.strip()
+        
+        # 1. Validación básica
+        if not usuario or not password:
+            self.error_text.value = "Por favor llene todos los campos"
+            self.error_text.visible = True
+            self.page.update()
+            return
+
+        # 2. Consultar base de datos
+        try:
+            # validar_empleado devuelve una tupla: (id, nombre) o None
+            empleado = validar_empleado(usuario, password)
+            
+            if empleado:
+                empleado_id = empleado[0]
+                empleado_nombre = empleado[1]
+                
+                logging.info(f"Login exitoso: ID {empleado_id} - {empleado_nombre}")
+                
+                # --- AQUÍ GUARDAMOS LA SESIÓN ---
+                self.page.session.set("empleado_id", empleado_id) 
+                self.page.session.set("empleado_nombre", empleado_nombre)
+                
+                # Ocultamos error si había
+                self.error_text.visible = False
+                
+                # Navegamos al main
+                self.page.go("/main") 
+            else:
+                self.error_text.value = "Usuario o contraseña incorrectos"
+                self.error_text.visible = True
+                # Limpiar contraseña para seguridad y comodidad
+                self.password_input.value = ""
+                self.page.update()
+                
+        except Exception as ex:
+            logging.error(f"Error en login: {ex}")
+            self.error_text.value = "Ocurrió un error en el sistema"
+            self.error_text.visible = True
+            self.page.update()
