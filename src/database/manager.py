@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import datetime
+import logging
 
 def crear_tablas():
     """Crea las tablas de productos y empleados si no existen"""
@@ -13,7 +14,7 @@ def crear_tablas():
         clave TEXT UNIQUE NOT NULL,
         nombre TEXT NOT NULL,
         peso REAL NOT NULL,
-        kilataje INTEGER NOT NULL,
+        kilataje TEXT NOT NULL,
         categoria TEXT NOT NULL
     )
     ''')
@@ -33,6 +34,7 @@ def crear_tablas():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         fecha TEXT NOT NULL,
         total REAL NOT NULL,
+        metodo_pago TEXT NOT NULL DEFAULT 'Efectivo',
         empleado_id INTEGER NOT NULL,
         FOREIGN KEY (empleado_id) REFERENCES empleados(id)
     )
@@ -48,6 +50,45 @@ def crear_tablas():
         precio_unitario REAL NOT NULL,
         FOREIGN KEY (venta_id) REFERENCES ventas(id),
         FOREIGN KEY (producto_id) REFERENCES productos(id)
+    )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS apartados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha_inicio TEXT NOT NULL,
+        empleado_id INTEGER NOT NULL,
+        total_venta REAL NOT NULL,
+        total_abonado REAL NOT NULL,
+        total_pendiente REAL NOT NULL, 
+        estado TEXT NOT NULL, -- "Pendiente", "Liquidado", "Cancelado"
+        FOREIGN KEY (empleado_id) REFERENCES empleados(id)
+    )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS detalles_apartado (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        apartado_id INTEGER NOT NULL,
+        producto_id_original INTEGER NOT NULL,
+        nombre TEXT NOT NULL,
+        peso REAL NOT NULL,
+        kilataje TEXT NOT NULL,
+        precio_unitario REAL NOT NULL,
+        FOREIGN KEY (apartado_id) REFERENCES apartados(id)
+    )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS abonos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        apartado_id INTEGER NOT NULL,
+        fecha TEXT NOT NULL,
+        monto_abonado REAL NOT NULL,
+        metodo_pago TEXT NOT NULL,
+        empleado_id INTEGER NOT NULL,
+        FOREIGN KEY (apartado_id) REFERENCES apartados(id),
+        FOREIGN KEY (empleado_id) REFERENCES empleados(id)
     )
     ''')
 
@@ -182,65 +223,111 @@ def eliminar_producto(id_producto):
     finally:
         conexion.close()
         
-def registrar_venta(empleado_id, productos_vendidos, total):
+def registrar_venta(empleado_id, productos_vendidos, total, metodo_pago):
     """
     Registra una venta completa y sus detalles.
-    
-    NOTA: La actualización de inventario (restar cantidad) se eliminó
-    porque la tabla 'productos' no tiene una columna 'cantidad'.
+    Elimina los productos vendidos de la tabla 'productos'.
     
     Args:
-        empleado_id: ID del empleado que realizó la venta
-        productos_vendidos: Lista de tuplas (producto_id, cantidad, precio_unitario)
-        total: Total de la venta después de descuentos
+        empleado_id: ID del empleado
+        productos_vendidos: Lista de tuplas (producto, precio_calculado)
+            donde producto = (id, clave, nombre, peso, kilataje, categoria)
+        total: Total de la venta
+        metodo_pago: "Efectivo", "Tarjeta Débito", "Tarjeta Crédito"
     
     Returns:
         ID de la venta registrada o None si hay error
     """
     conexion = sqlite3.connect('inventario_joyeria.db')
     cursor = conexion.cursor()
-    
-    # Obtener fecha y hora actuales
-    fecha_actual = datetime.now().strftime("%Y-%m-%d")
-    
+    fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     try:
-        # Registrar la venta maestra
+        # 1. Registrar la venta maestra
         cursor.execute('''
-            INSERT INTO ventas (fecha, total, empleado_id)
-            VALUES (?, ?, ?)
-        ''', (fecha_actual, total, empleado_id))
+            INSERT INTO ventas (fecha, total, empleado_id, metodo_pago)
+            VALUES (?, ?, ?, ?)
+        ''', (fecha_actual, total, empleado_id, metodo_pago))
         
         venta_id = cursor.lastrowid
         
-        # Registrar detalles de la venta
-        # La estructura de productos_vendidos se asumió como (producto_id, cantidad, precio_unitario)
-        # para que 'precio_unitario' esté disponible.
-        for producto_id, cantidad, precio_unitario in productos_vendidos:
+        # 2. Registrar detalles y ELIMINAR productos
+        for producto, precio_unitario in productos_vendidos:
+            # producto = (id[0], clave[1], nombre[2], peso[3], kilataje[4], categoria[5])
             
             # Registrar detalle
             cursor.execute('''
-                INSERT INTO detalles_venta (venta_id, producto_id, cantidad, precio_unitario)
-                VALUES (?, ?, ?, ?)
-            ''', (venta_id, producto_id, cantidad, precio_unitario))
+                INSERT INTO detalles_venta (venta_id, producto_id_original, nombre, peso, kilataje, precio_unitario)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (venta_id, producto[0], producto[2], producto[3], producto[4], precio_unitario))
             
-            # --- SECCIÓN ELIMINADA ---
-            # La siguiente sección fue eliminada porque la tabla 'productos'
-            # no tiene una columna 'cantidad' según tu función crear_tablas().
-            #
-            # cursor.execute('''
-            #     UPDATE productos
-            #     SET cantidad = cantidad - ?
-            #     WHERE id = ?
-            # ''', (cantidad, producto_id))
-            # -------------------------
+            # 3. ELIMINAR producto del inventario
+            cursor.execute("DELETE FROM productos WHERE id = ?", (producto[0],))
         
         conexion.commit()
         return venta_id
     
     except sqlite3.Error as e:
         conexion.rollback()
-        print(f"Error al registrar venta: {e}")
+        logging.error(f"Error al registrar venta: {e}")
+        return None
+    
+    finally:
+        conexion.close()
+
+def registrar_apartado(empleado_id, productos_apartados, total_venta, abono_inicial, metodo_pago_abono):
+    """
+    Registra un nuevo apartado, el primer abono, y elimina los productos del inventario.
+    
+    Args:
+        empleado_id: ID del empleado
+        productos_apartados: Lista de tuplas (producto, precio_calculado)
+        total_venta: El costo total de los productos
+        abono_inicial: El primer pago
+        metodo_pago_abono: Método de pago del primer abono
+    
+    Returns:
+        ID del apartado registrado o None si hay error
+    """
+    conexion = sqlite3.connect('inventario_joyeria.db')
+    cursor = conexion.cursor()
+    fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    try:
+        # 1. Registrar el apartado maestro
+        total_pendiente = total_venta - abono_inicial
+        cursor.execute('''
+            INSERT INTO apartados (fecha_inicio, empleado_id, total_venta, total_abonado, total_pendiente, estado)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (fecha_actual, empleado_id, total_venta, abono_inicial, total_pendiente, "Pendiente"))
+        
+        apartado_id = cursor.lastrowid
+        
+        # 2. Registrar el primer abono
+        cursor.execute('''
+            INSERT INTO abonos (apartado_id, fecha, monto_abonado, metodo_pago, empleado_id)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (apartado_id, fecha_actual, abono_inicial, metodo_pago_abono, empleado_id))
+        
+        # 3. Registrar detalles y ELIMINAR productos
+        for producto, precio_unitario in productos_apartados:
+            # producto = (id[0], clave[1], nombre[2], peso[3], kilataje[4], categoria[5])
+            
+            # Registrar detalle del apartado
+            cursor.execute('''
+                INSERT INTO detalles_apartado (apartado_id, producto_id_original, nombre, peso, kilataje, precio_unitario)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (apartado_id, producto[0], producto[2], producto[3], producto[4], precio_unitario))
+            
+            # 4. ELIMINAR producto del inventario
+            cursor.execute("DELETE FROM productos WHERE id = ?", (producto[0],))
+        
+        conexion.commit()
+        return apartado_id
+    
+    except sqlite3.Error as e:
+        conexion.rollback()
+        logging.error(f"Error al registrar apartado: {e}")
         return None
     
     finally:

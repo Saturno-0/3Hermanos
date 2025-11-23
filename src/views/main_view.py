@@ -1,5 +1,6 @@
 import flet as ft
 from modals.modal_crud_producto import show_modal_editar_producto
+from modals.modal_pago import show_modal_pago
 from database.manager import obtener_productos
 from functools import partial
 from datetime import datetime
@@ -29,6 +30,8 @@ class MainView(ft.View):
         )
         self.productos_en_sidebar_claves = set()
 
+        self.productos_con_precio_sidebar = []
+
         self.txt_subtotal = ft.Text(
             "$0.00", 
             size=18, 
@@ -45,7 +48,7 @@ class MainView(ft.View):
                 shape=ft.RoundedRectangleBorder(radius=7),
                 text_style=ft.TextStyle(size=20, weight=ft.FontWeight.BOLD)
             ),
-            disabled=True # Inicia deshabilitado
+            disabled=True
         )
         
         self._construir_interfaz()
@@ -164,12 +167,13 @@ class MainView(ft.View):
     # --- NUEVO ---
     def _actualizar_subtotal(self):
         """
-        Calcula el subtotal de los productos en la sidebar y actualiza
-        el texto y el estado del botón 'Continuar'.
+        Calcula el subtotal, actualiza la UI y la lista interna
+        'self.productos_con_precio_sidebar' para el modal de pago.
         """
         total = 0.0
         
-        # Creamos un diccionario {clave: producto} para buscar rápido
+        self.productos_con_precio_sidebar = []
+        
         try:
             todos_productos = {p[1]: p for p in obtener_productos()}
         except Exception as e:
@@ -180,21 +184,15 @@ class MainView(ft.View):
             if clave in todos_productos:
                 producto = todos_productos[clave]
                 
-                # Lógica de cálculo (simplificada)
-                precio_gramo = self._obtener_precio_gramo(producto[4]) # kilataje
-                try:
-                    peso_float = float(producto[3]) # peso
-                    total += peso_float * precio_gramo
-                except (ValueError, TypeError):
-                    pass # Ignora productos con datos erróneos
+                precio_float = self._calcular_precio_float(producto)
+                total += precio_float
+                
+                self.productos_con_precio_sidebar.append((producto, precio_float))
         
-        # Actualizar el texto
         self.txt_subtotal.value = f"${total:,.2f}"
         
-        # Habilitar/deshabilitar botón
         self.btn_continuar.disabled = (total == 0.0)
         
-        # Actualizar controles en la UI (si la página ya cargó)
         if self.page:
             self.txt_subtotal.update()
             self.btn_continuar.update()
