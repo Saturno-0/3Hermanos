@@ -2,7 +2,6 @@ import flet as ft
 from modals.modal_crud_producto import show_modal_editar_producto
 from modals.modal_pago import show_modal_pago
 from database.manager import obtener_productos
-from functools import partial
 from datetime import datetime
 import logging
 
@@ -28,8 +27,11 @@ class MainView(ft.View):
             scroll="auto",
             expand=True
         )
+        
+        # Conjunto para evitar duplicados visuales (guarda las claves 'A001', etc.)
         self.productos_en_sidebar_claves = set()
-
+        
+        # Lista para calcular totales y pasar al pago: [(producto_tuple, precio_float), ...]
         self.productos_con_precio_sidebar = []
 
         self.txt_subtotal = ft.Text(
@@ -38,31 +40,29 @@ class MainView(ft.View):
             weight=ft.FontWeight.BOLD, 
             text_align=ft.TextAlign.RIGHT
         )
+        
         self.btn_continuar = ft.FilledButton(
             "Continuar",
-            expand=True, # Se expande al ancho de la sidebar
+            expand=True,
             height=50,
             color='Black',
-            bgcolor='#C39D88', # Usamos el color de la app
+            bgcolor='#C39D88',
             style=ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=7),
                 text_style=ft.TextStyle(size=20, weight=ft.FontWeight.BOLD)
             ),
-            disabled=True
+            disabled=True,
+            on_click=self._evento_boton_continuar # Se asigna dinámicamente cuando hay total
         )
         
         self._construir_interfaz()
-        
         self.actualizar_lista_productos()
 
+    # --- LÓGICA DE PRECIOS ---
+
     def _obtener_precio_gramo(self, kilataje):
-        """
-        Método auxiliar para obtener el precio por gramo desde los TextFields del AppBar.
-        Maneja errores si el valor no es un número.
-        """
         precio = 0.0
         kilataje_str = str(kilataje).lower()
-
         try:
             if "10k" in kilataje_str:
                 precio = float(self.txt_oro_10k.value)
@@ -70,46 +70,31 @@ class MainView(ft.View):
                 precio = float(self.txt_oro_14k.value)
             elif "ita" in kilataje_str:
                 precio = float(self.txt_italiano.value)
-        
         except (ValueError, TypeError):
             precio = 0.0
-        
         return precio
     
-    def _calcular_precio_str(self, producto):
-        """
-        Calcula y formatea el precio de un producto.
-        Índices: [2]=Nombre, [3]=Peso, [4]=Kilataje
-        """
-        nombre = producto[2]
-        peso_str = producto[3]
-        kilataje = producto[4]
-
-        precio_gramo = self._obtener_precio_gramo(kilataje)
-        precio_total = 0.0
-        
+    def _calcular_precio_numerico(self, producto):
+        """Retorna el valor decimal (float) puro"""
         try:
-            peso_float = float(peso_str)
-            precio_total = peso_float * precio_gramo
-        except (ValueError, TypeError) as e:
-            logging.error(f"Error al calcular precio para {nombre}: {e}")
-            return "$Error"
-        
-        return f"${precio_total:,.2f}"
+            peso = float(producto[3]) 
+            kilataje = producto[4]
+            precio_gramo = self._obtener_precio_gramo(kilataje)
+            return peso * precio_gramo
+        except (ValueError, TypeError):
+            return 0.0
+
+    # --- CREACIÓN DE TILES (Visuales) ---
 
     def _crear_producto_tile(self, producto, on_agregar):
-        # Índices confirmados: 2=Nombre, 3=Peso, 4=Kilataje, 5=Categoría
+        precio_num = self._calcular_precio_numerico(producto)
+        texto_precio = f"${precio_num:,.2f}"
         
         nombre = producto[2]
         peso_str = producto[3]
         kilataje = producto[4]
         categoria = producto[5]
         clave = producto[1]
-
-        precio_formateado = self._calcular_precio_str(producto)
-        
-        if precio_formateado == "$Error":
-            peso_str = f"ErrorPeso ({peso_str})"
         
         return ft.Column(
             controls=[
@@ -120,7 +105,7 @@ class MainView(ft.View):
                         ft.Text(f"Categoría: {categoria}    Clave: {clave}", weight=ft.FontWeight.NORMAL, size=15, selectable=True),  
                     ]),
                     title=ft.Container(
-                        ft.Text(f"Precio: {precio_formateado}", size=15, weight=ft.FontWeight.BOLD), 
+                        ft.Text(f"Precio: {texto_precio}", size=15, weight=ft.FontWeight.BOLD), 
                         alignment=ft.alignment.center_right,
                     ),
                     trailing=ft.ElevatedButton(
@@ -134,103 +119,171 @@ class MainView(ft.View):
                 ft.Divider(height=1, color=ft.Colors.GREY_400)
             ]
         )
-    
-    def _crear_sidebar_tile(self, producto, precio_formateado):
+
+    def _crear_sidebar_tile(self, producto, precio_num):
         """
-        Crea el widget para el producto en la sidebar,
-        basado en el formato solicitado.
+        Crea el elemento visual del carrito usando un Row personalizado
+        para evitar que el texto se aplaste verticalmente.
         """
-        # Índices: [2]=Nombre, [3]=Peso, [4]=Kilataje, [1]=Clave
+        precio_formateado = f"${precio_num:,.2f}"
         
-        tile_en_sidebar = ft.Column(
-            spacing=0,
-            controls=[
-                ft.ListTile(
-                    content_padding=ft.padding.only(left=5, right=5, top=2, bottom=2),
-                    title=ft.Text(
-                        f"{producto[2]} | {producto[3]} gr. | {producto[4]}", 
-                        weight=ft.FontWeight.BOLD, size=14
+        # Elemento contenedor del producto
+        tile_en_sidebar = ft.Container(
+            padding=ft.padding.symmetric(vertical=5, horizontal=5),
+            border=ft.border.only(bottom=ft.border.BorderSide(1, ft.Colors.GREY_300)),
+            content=ft.Row(
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    # IZQUIERDA: Nombre y Código (Usamos expand=True para que ocupe el espacio disponible)
+                    ft.Column(
+                        spacing=2,
+                        expand=True, 
+                        controls=[
+                            ft.Text(
+                                f"{producto[2]}", # Nombre
+                                weight=ft.FontWeight.BOLD, 
+                                size=13,
+                                max_lines=2, # Si es muy largo, usa 2 lineas maximo
+                                overflow=ft.TextOverflow.ELLIPSIS
+                            ),
+                            ft.Text(
+                                f"{producto[3]} gr. | {producto[4]}", # Detalles
+                                size=11, 
+                                color=ft.Colors.GREY_700
+                            ),
+                            ft.Text(
+                                f"Cod: {producto[1]}", # Codigo
+                                size=10, 
+                                color=ft.Colors.GREY_500
+                            ),
+                        ]
                     ),
-                    subtitle=ft.Text(f"Código: {producto[1]}", size=12),
-                    trailing=ft.Text(
-                        precio_formateado, 
-                        size=15, 
-                        weight=ft.FontWeight.BOLD
-                    ),
-                    on_click=lambda e: self._regresar_a_lista(producto, tile_en_sidebar)
-                ),
-                ft.Divider(height=1)
-            ]
+                    
+                    # DERECHA: Precio y Boton Eliminar
+                    ft.Column(
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        horizontal_alignment=ft.CrossAxisAlignment.END,
+                        spacing=0,
+                        controls=[
+                            ft.Text(
+                                precio_formateado, 
+                                size=14, 
+                                weight=ft.FontWeight.BOLD,
+                                color=ft.Colors.BLACK
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.DELETE_OUTLINE,
+                                icon_color=ft.Colors.RED_400,
+                                icon_size=20,
+                                tooltip="Quitar del carrito",
+                                on_click=lambda e: self._remover_de_sidebar(producto)
+                            )
+                        ]
+                    )
+                ]
+            )
         )
         return tile_en_sidebar
+    # --- LÓGICA DE ESTADO (Agregar/Quitar/Subtotal) ---
 
-    # --- NUEVO ---
     def _actualizar_subtotal(self):
-        """
-        Calcula el subtotal, actualiza la UI y la lista interna
-        'self.productos_con_precio_sidebar' para el modal de pago.
-        """
-        total = 0.0
-        
-        self.productos_con_precio_sidebar = []
-        
-        try:
-            todos_productos = {p[1]: p for p in obtener_productos()}
-        except Exception as e:
-            logging.error(f"Error al obtener productos para subtotal: {e}")
-            todos_productos = {}
-        
-        for clave in self.productos_en_sidebar_claves:
-            if clave in todos_productos:
-                producto = todos_productos[clave]
-                
-                precio_float = self._calcular_precio_float(producto)
-                total += precio_float
-                
-                self.productos_con_precio_sidebar.append((producto, precio_float))
-        
+        total = sum(item[1] for item in self.productos_con_precio_sidebar)
         self.txt_subtotal.value = f"${total:,.2f}"
         
-        self.btn_continuar.disabled = (total == 0.0)
+        # Habilitar botón y asignar acción con el total actual capturado
+        self.btn_continuar.disabled = (total == 0)
+        self.btn_continuar.on_click = lambda e: self._abrir_modal_pago(total)
         
-        if self.page:
-            self.txt_subtotal.update()
-            self.btn_continuar.update()
+        self.txt_subtotal.update()
+        self.btn_continuar.update()
 
-    # --- MODIFICADO ---
     def _agregar_a_sidebar(self, producto):
-        clave_producto = producto[1]
-        self.productos_en_sidebar_claves.add(clave_producto)
-        precio_str = self._calcular_precio_str(producto)
-        nuevo_tile = self._crear_sidebar_tile(producto, precio_str)
+        clave = producto[1]
+        if clave in self.productos_en_sidebar_claves:
+            return 
+
+        self.productos_en_sidebar_claves.add(clave)
+        
+        precio_num = self._calcular_precio_numerico(producto)
+        self.productos_con_precio_sidebar.append((producto, precio_num))
+
+        nuevo_tile = self._crear_sidebar_tile(producto, precio_num)
         self.sidebar_content.controls.append(nuevo_tile)
         
-        if self.sidebar_content.page:
-            self.sidebar_content.update()
-            
-        self.actualizar_lista_productos()
-        
-        # --- NUEVO ---
-        self._actualizar_subtotal() # Actualiza el total
-
-    # --- MODIFICADO ---
-    def _regresar_a_lista(self, producto, tile_a_remover):
-        clave_producto = producto[1]
-        if clave_producto in self.productos_en_sidebar_claves:
-            self.productos_en_sidebar_claves.remove(clave_producto)
-            
-        self.sidebar_content.controls.remove(tile_a_remover)
-        
-        if self.sidebar_content.page:
-            self.sidebar_content.update()
-            
-        self.actualizar_lista_productos()
-        
-        # --- NUEVO ---
+        self.sidebar_content.update()
         self._actualizar_subtotal()
+        self.actualizar_lista_productos() # Para actualizar botones o estado visual si fuera necesario
 
+    # CORRECCIÓN: Faltaba este método
+    def _remover_de_sidebar(self, producto_a_borrar):
+        clave = producto_a_borrar[1]
+        
+        # 1. Quitar del set de claves
+        if clave in self.productos_en_sidebar_claves:
+            self.productos_en_sidebar_claves.remove(clave)
+            
+        # 2. Quitar de la lista de precios (filtro por clave)
+        self.productos_con_precio_sidebar = [
+            item for item in self.productos_con_precio_sidebar 
+            if item[0][1] != clave
+        ]
+        
+        # 3. Reconstruir visualmente la sidebar 
+        # (Es más seguro reconstruirla que buscar el control específico para eliminarlo)
+        self._reconstruir_sidebar_visual()
+        
+        self._actualizar_subtotal()
+        self.actualizar_lista_productos()
 
-    # --- MODIFICADO ---
+    def _reconstruir_sidebar_visual(self):
+        """Reconstruye los controles del sidebar basándose en la lista actual"""
+        controles_base = [
+            ft.Text("Los productos que escanees o busques aparecerán aquí", size=12),
+            ft.Divider(height=1)
+        ]
+        
+        nuevos_tiles = []
+        for prod, precio in self.productos_con_precio_sidebar:
+            nuevos_tiles.append(self._crear_sidebar_tile(prod, precio))
+            
+        self.sidebar_content.controls = controles_base + nuevos_tiles
+        self.sidebar_content.update()
+
+    # --- LÓGICA DE PAGO ---
+
+    def _abrir_modal_pago(self, total):
+        empleado_id = self.page.session.get('empleado_id')
+        if not empleado_id: 
+            print("Error: No empleado ID")
+            return
+
+        show_modal_pago(
+            self.page, 
+            self.productos_con_precio_sidebar, 
+            total, 
+            empleado_id, 
+            self._limpiar_despues_venta # CORRECCIÓN: Ahora apunta a una función existente
+        )
+
+    def _evento_boton_continuar(self, e):
+        """Manejador fijo para el botón continuar"""
+        if self.total_actual > 0:
+            self._abrir_modal_pago(self.total_actual)
+        else:
+            # Por seguridad, si el total es 0, no abrimos nada
+            print("Error: El total es 0")
+
+    # CORRECCIÓN: Faltaba este método para limpiar tras venta exitosa
+    def _limpiar_despues_venta(self):
+        self.productos_en_sidebar_claves.clear()
+        self.productos_con_precio_sidebar = []
+        self._reconstruir_sidebar_visual()
+        self._actualizar_subtotal()
+        self.actualizar_lista_productos() # Refresca lista principal (ya sin los vendidos)
+
+    # --- FILTRADO Y ACTUALIZACIÓN ---
+
     def filtrar_productos(self, texto_busqueda="", criterio_orden="nombre"):
         productos = obtener_productos()
         
@@ -253,6 +306,7 @@ class MainView(ft.View):
         except Exception as e:
             logging.error(f"Error al ordenar: {e}")
             
+        # Filtramos los que ya están en sidebar para que no salgan en la lista principal
         productos_finales = [
             p for p in productos
             if p[1] not in self.productos_en_sidebar_claves
@@ -261,12 +315,13 @@ class MainView(ft.View):
         return productos_finales
 
     def actualizar_lista_productos(self, texto_busqueda="", criterio_orden="nombre"):
-        """
-        Actualiza la self.lista con los productos filtrados y ordenados.
-        Recalcula todos los precios.
-        """
         if not self.lista:
             return
+
+        # Si hay texto en el filtro visual, mantenemos ese criterio
+        if self.filter_text:
+             if "Kilataje" in self.filter_text.value: criterio_orden = "kilataje"
+             elif "Categoria" in self.filter_text.value: criterio_orden = "categoria"
 
         productos = self.filtrar_productos(texto_busqueda, criterio_orden)
         
@@ -283,35 +338,32 @@ class MainView(ft.View):
 
     def precios_actualizados(self, e):
         """
-        Refresca ambas listas para recalcular todos los precios.
+        CORRECCIÓN CRÍTICA: 
+        1. Recalcula precios numéricos de items en sidebar.
+        2. Actualiza la lista interna self.productos_con_precio_sidebar.
+        3. Actualiza visualmente el sidebar y la lista principal.
         """
-        criterio_actual = "nombre"
-        if self.filter_text:
-            if "Kilataje" in self.filter_text.value:
-                criterio_actual = "kilataje"
-            elif "Categoria" in self.filter_text.value:
-                criterio_actual = "categoria"
         
-        self.actualizar_lista_productos(criterio_orden=criterio_actual)
+        # 1. Recuperamos los productos que están en sidebar (desde DB o memoria)
+        # Nota: Usamos la lista actual de sidebar para preservar el orden y objetos
+        lista_actualizada = []
         
-        productos_en_sidebar = [
-            p for p in obtener_productos() 
-            if p[1] in self.productos_en_sidebar_claves
-        ]
-        
-        controles_sidebar = [self.sidebar_content.controls[0], self.sidebar_content.controls[1]]
-        
-        for producto in productos_en_sidebar:
-            precio_str = self._calcular_precio_str(producto)
-            nuevo_tile = self._crear_sidebar_tile(producto, precio_str)
-            controles_sidebar.append(nuevo_tile)
+        for producto_tuple, _ in self.productos_con_precio_sidebar:
+            # Recalculamos precio con los nuevos valores de los inputs
+            nuevo_precio = self._calcular_precio_numerico(producto_tuple)
+            lista_actualizada.append((producto_tuple, nuevo_precio))
             
-        self.sidebar_content.controls = controles_sidebar
-        if self.sidebar_content.page:
-            self.sidebar_content.update()
-
+        # 2. Reemplazamos la lista oficial
+        self.productos_con_precio_sidebar = lista_actualizada
+        
+        # 3. Actualizamos visualmente el Sidebar
+        self._reconstruir_sidebar_visual()
+        
+        # 4. Actualizamos subtotal
         self._actualizar_subtotal()
-
+        
+        # 5. Actualizamos la lista principal (los precios de "Agregar" también cambian)
+        self.actualizar_lista_productos()
 
     def on_filter_selected(self, e):
         self.filter_text.value = f"Filtrar por: {e.control.text}"
@@ -324,25 +376,27 @@ class MainView(ft.View):
         if self.page:
             self.update()
 
+    # --- INTERFAZ UI ---
+
     def _construir_interfaz(self):
         
         self.txt_oro_10k = ft.TextField(
             bgcolor="CCCCCC",
             height=40, width=150, border_radius=7, 
             prefix_text="$", suffix_text="/gr",
-            on_change=self.precios_actualizados # <--- ACTUALIZA AL CAMBIAR
+            on_change=self.precios_actualizados
         )
         self.txt_oro_14k = ft.TextField(
             bgcolor="CCCCCC",
             height=40, width=150, border_radius=7, 
             prefix_text="$", suffix_text="/gr",
-            on_change=self.precios_actualizados # <--- ACTUALIZA AL CAMBIAR
+            on_change=self.precios_actualizados
         )
         self.txt_italiano = ft.TextField(
             bgcolor="CCCCCC",
             height=40, width=150, border_radius=7, 
             prefix_text="$", suffix_text="/gr",
-            on_change=self.precios_actualizados # <--- ACTUALIZA AL CAMBIAR
+            on_change=self.precios_actualizados
         )
 
         appbar = ft.AppBar(
@@ -364,11 +418,11 @@ class MainView(ft.View):
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         controls=[
                             ft.Text("Oro 10k:", font_family="Poppins Medium", size=12),
-                            self.txt_oro_10k, # <-- Usamos el atributo
+                            self.txt_oro_10k,
                             ft.Text("Oro 14k:", font_family="Poppins Medium", size=12),
-                            self.txt_oro_14k, # <-- Usamos el atributo
+                            self.txt_oro_14k,
                             ft.Text("Italiano:",font_family="Poppins Medium", size=12),
-                            self.txt_italiano, # <-- Usamos el atributo
+                            self.txt_italiano,
                         ]
                     )
                 ),
@@ -381,7 +435,6 @@ class MainView(ft.View):
                                 color="#F2F2F2",
                                 bgcolor="#506C64",
                                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=7)),
-                                # Usamos el método de la clase
                                 on_click=lambda e: show_modal_editar_producto(self.page, lambda: self.actualizar_lista_productos())
                             ),
                             ft.ElevatedButton(
@@ -409,23 +462,21 @@ class MainView(ft.View):
         fixed_controls = ft.Column(
             controls=[
                 ft.Divider(),
-                # El Subtotal
                 ft.Row(
                     controls=[
                         ft.Text("Subtotal:", size=18, weight=ft.FontWeight.BOLD),
-                        self.txt_subtotal, # El texto que actualizaremos
+                        self.txt_subtotal,
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN
                 ),
-                # El botón de Continuar
                 ft.Container(
-                    content=self.btn_continuar, # El botón que actualizaremos
+                    content=self.btn_continuar,
                     alignment=ft.alignment.center,
                     padding=ft.padding.only(top=10)
                 )
             ],
             spacing=10,
-            tight=True # Para que no ocupe espacio extra
+            tight=True
         )
 
         sidebar = ft.Container(
@@ -448,15 +499,15 @@ class MainView(ft.View):
                 controls=[
                     ft.Text('Listado de Productos', weight=ft.FontWeight.BOLD, size=20),
                     ft.Container(expand=True),
-                    self.filter_text, # <-- Usamos el atributo
+                    self.filter_text,
                     ft.PopupMenuButton(  
                         icon = "FILTER_LIST",
                         icon_color=ft.Colors.BLACK,
                         tooltip="Filtrar",
                         items=[
-                            ft.PopupMenuItem(text="Nombre", on_click=self.on_filter_selected), # <-- Usamos el método
-                            ft.PopupMenuItem(text="Kilataje", on_click=self.on_filter_selected), # <-- Usamos el método
-                            ft.PopupMenuItem(text="Categoria", on_click=self.on_filter_selected) # <-- Usamos el método
+                            ft.PopupMenuItem(text="Nombre", on_click=self.on_filter_selected),
+                            ft.PopupMenuItem(text="Kilataje", on_click=self.on_filter_selected),
+                            ft.PopupMenuItem(text="Categoria", on_click=self.on_filter_selected)
                         ],
                     )
                 ]
@@ -475,13 +526,11 @@ class MainView(ft.View):
                         hint_text="Buscar...",
                         border=ft.InputBorder.NONE,
                         expand=True,
-                        # Usamos el método de la clase
                         on_change=lambda e: self.actualizar_lista_productos(texto_busqueda=e.control.value)
                     )
                 ]
             )
         )
-
         
         product_container = ft.Column(
             controls=[
@@ -504,4 +553,23 @@ class MainView(ft.View):
         )
 
         self.appbar = appbar
-        self.controls = [main_container]
+        self.controls = [main_container,
+                        ft.Row(
+                            [
+                                ft.Text(
+                                    f"Iniciaste sesión como: {self.page.session.get('empleado_nombre')}",
+                                    size=17,
+                                    color=ft.Colors.BLACK,
+                                    weight=ft.FontWeight.W_600
+                                ),
+                                ft.FilledButton(
+                                "Cerrar sesion",
+                                bgcolor='White',
+                                color='Black',
+                                style=ft.ButtonStyle(
+                                    shape=ft.RoundedRectangleBorder(radius=7)),
+                                    on_click=lambda e: self.page.go("/login")
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                        )]
