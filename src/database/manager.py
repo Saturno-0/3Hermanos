@@ -45,11 +45,13 @@ def crear_tablas():
     CREATE TABLE IF NOT EXISTS detalles_venta (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         venta_id INTEGER NOT NULL,
-        producto_id INTEGER NOT NULL,
-        cantidad INTEGER NOT NULL,
-        precio_unitario REAL NOT NULL,
-        FOREIGN KEY (venta_id) REFERENCES ventas(id),
-        FOREIGN KEY (producto_id) REFERENCES productos(id)
+        producto_id_original INTEGER, 
+        nombre TEXT NOT NULL,
+        peso REAL NOT NULL,
+        kilataje TEXT NOT NULL,
+        categoria TEXT NOT NULL,
+        precio_venta REAL NOT NULL,
+        FOREIGN KEY (venta_id) REFERENCES ventas(id)
     )
     ''')
 
@@ -225,25 +227,17 @@ def eliminar_producto(id_producto):
         
 def registrar_venta(empleado_id, productos_vendidos, total, metodo_pago):
     """
-    Registra una venta completa y sus detalles.
-    Elimina los productos vendidos de la tabla 'productos'.
-    
-    Args:
-        empleado_id: ID del empleado
-        productos_vendidos: Lista de tuplas (producto, precio_calculado)
-            donde producto = (id, clave, nombre, peso, kilataje, categoria)
-        total: Total de la venta
-        metodo_pago: "Efectivo", "Tarjeta Débito", "Tarjeta Crédito"
-    
-    Returns:
-        ID de la venta registrada o None si hay error
+    Implementa la lógica Opción B:
+    1. Crea la venta.
+    2. Copia los datos del producto a detalles_venta.
+    3. BORRA el producto de la tabla productos.
     """
     conexion = sqlite3.connect('inventario_joyeria.db')
     cursor = conexion.cursor()
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     try:
-        # 1. Registrar la venta maestra
+        # 1. Registrar Venta Maestra
         cursor.execute('''
             INSERT INTO ventas (fecha, total, empleado_id, metodo_pago)
             VALUES (?, ?, ?, ?)
@@ -251,27 +245,33 @@ def registrar_venta(empleado_id, productos_vendidos, total, metodo_pago):
         
         venta_id = cursor.lastrowid
         
-        # 2. Registrar detalles y ELIMINAR productos
-        for producto, precio_unitario in productos_vendidos:
-            # producto = (id[0], clave[1], nombre[2], peso[3], kilataje[4], categoria[5])
+        # 2. Procesar cada producto
+        for producto_tuple, precio_final in productos_vendidos:
+            # Desempaquetamos la tupla original de la BD
+            # (id, clave, nombre, peso, kilataje, categoria)
+            p_id = producto_tuple[0]
+            p_nombre = producto_tuple[2]
+            p_peso = producto_tuple[3]
+            p_kilataje = producto_tuple[4]
+            p_categoria = producto_tuple[5]
             
-            # Registrar detalle
+            # A) Guardamos la "FOTO" en el historial (Detalle)
             cursor.execute('''
-                INSERT INTO detalles_venta (venta_id, producto_id_original, nombre, peso, kilataje, precio_unitario)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (venta_id, producto[0], producto[2], producto[3], producto[4], precio_unitario))
+                INSERT INTO detalles_venta 
+                (venta_id, producto_id_original, nombre, peso, kilataje, categoria, precio_venta)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (venta_id, p_id, p_nombre, p_peso, p_kilataje, p_categoria, precio_final))
             
-            # 3. ELIMINAR producto del inventario
-            cursor.execute("DELETE FROM productos WHERE id = ?", (producto[0],))
+            # B) BORRAMOS el producto del inventario actual
+            cursor.execute("DELETE FROM productos WHERE id = ?", (p_id,))
         
         conexion.commit()
         return venta_id
     
     except sqlite3.Error as e:
         conexion.rollback()
-        logging.error(f"Error al registrar venta: {e}")
+        logging.error(f"Error fatal en venta (Rollback realizado): {e}")
         return None
-    
     finally:
         conexion.close()
 
