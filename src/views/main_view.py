@@ -1,5 +1,6 @@
 import flet as ft
 from modals.modal_crud_producto import show_modal_editar_producto
+from modals.modal_corte import show_modal_corte
 from modals.modal_pago import show_modal_pago
 from database.manager import obtener_productos, obtener_precios_oro, actualizar_precio_oro
 import logging
@@ -12,11 +13,16 @@ class MainView(ft.View):
         )
         self.page = page
         
+        # Variables de estado
         self.txt_oro_10k = None
         self.txt_oro_14k = None
         self.txt_italiano = None
         self.lista = None
         self.filter_text = None
+        
+        # --- LÓGICA CÓDIGO 2: Estructura de carrito basada en lista de diccionarios ---
+        # [{'product': db_tuple, 'price': float, 'qty': int}, ...]
+        self.carrito = [] 
         
         self.sidebar_content = ft.Column(
             controls=[
@@ -26,12 +32,6 @@ class MainView(ft.View):
             scroll="auto",
             expand=True
         )
-        
-        # Conjunto para evitar duplicados visuales (guarda las claves 'A001', etc.)
-        self.productos_en_sidebar_claves = set()
-        
-        # Lista para calcular totales y pasar al pago: [(producto_tuple, precio_float), ...]
-        self.productos_con_precio_sidebar = []
 
         self.txt_subtotal = ft.Text(
             "$0.00", 
@@ -51,13 +51,12 @@ class MainView(ft.View):
                 text_style=ft.TextStyle(size=20, weight=ft.FontWeight.BOLD)
             ),
             disabled=True,
-            on_click=self._evento_boton_continuar # Se asigna dinámicamente cuando hay total
         )
         
         self._construir_interfaz()
         self.actualizar_lista_productos()
 
-    # --- LÓGICA DE PRECIOS ---
+    # --- LÓGICA DE PRECIOS (Código 2) ---
 
     def _obtener_precio_gramo(self, kilataje):
         precio = 0.0
@@ -74,7 +73,7 @@ class MainView(ft.View):
         return precio
     
     def _calcular_precio_numerico(self, producto):
-        """Retorna el valor decimal (float) puro"""
+        """Calcula el precio sugerido basado en peso * cotización"""
         try:
             peso = float(producto[3]) 
             kilataje = producto[4]
@@ -83,51 +82,61 @@ class MainView(ft.View):
         except (ValueError, TypeError):
             return 0.0
 
-    # --- CREACIÓN DE TILES (Visuales) ---
+    # --- TILES VISUALES (Lista Principal) ---
+    # Mantiene el diseño del Codigo 1, pero usa la lógica de stock del Codigo 2
 
     def _crear_producto_tile(self, producto, on_agregar):
-        precio_num = self._calcular_precio_numerico(producto)
-        texto_precio = f"${precio_num:,.2f}"
+        # Indices: [0]id, [1]key, [2]name, [3]weight, [4]karat, [5]category, [6]qty
+        cantidad_stock = producto[6] if len(producto) > 6 else 1
         
+        # --- LÓGICA CÓDIGO 2: Calcular stock visual disponible ---
+        en_carrito = 0
+        for item in self.carrito:
+            if item['product'][0] == producto[0]: # Comparar por ID
+                en_carrito = item['qty']
+                break
+        
+        disponible_visual = cantidad_stock - en_carrito
+
         nombre = producto[2]
         peso_str = producto[3]
         kilataje = producto[4]
         categoria = producto[5]
         clave = producto[1]
-        cantidad_stock = producto[6] if len(producto) > 6 else 1
         
-        # Si es más de 1, mostramos etiqueta de stock
+        # Etiquetas de stock (Diseño Código 1)
         texto_stock = ""
         color_stock = ft.Colors.BLACK
         
         if cantidad_stock > 1:
-            texto_stock = f"Stock: {cantidad_stock}"
+            texto_stock = f"Stock: {disponible_visual}" # Muestra el disponible real
             color_stock = ft.Colors.BLUE_GREY
         else:
             texto_stock = "Pieza Única"
             color_stock = ft.Colors.ORANGE_400
         
+        precio_num = self._calcular_precio_numerico(producto)
+        texto_precio = f"${precio_num:,.2f}"
+        
         return ft.Container(
             padding=ft.padding.all(10),
-            # Opcional: un color de fondo al pasar el mouse o siempre
-            # bgcolor=ft.Colors.WHITE, 
             content=ft.Column(
                 spacing=0,
                 controls=[
                     ft.Row(
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        vertical_alignment=ft.CrossAxisAlignment.START, # Alinea todo arriba
+                        vertical_alignment=ft.CrossAxisAlignment.START,
                         controls=[
-                            # --- COLUMNA IZQUIERDA (Información) ---
+                            # --- COLUMNA IZQUIERDA (Info) ---
                             ft.Column(
                                 spacing=2,
-                                expand=True, # IMPORTANTE: Ocupa todo el espacio posible
+                                expand=True,
                                 controls=[
                                     ft.Text(
                                         f"{nombre} | {peso_str} gr. | {kilataje}", 
                                         weight=ft.FontWeight.BOLD, 
                                         color='Black', 
-                                        size=20 # Un poco más chico para que quepa mejor, o 18
+                                        size=20 
                                     ),
                                     ft.Text(
                                         f"Categoría: {categoria} - Clave: {clave}", 
@@ -159,93 +168,136 @@ class MainView(ft.View):
                                         color='Black',
                                         bgcolor='#C39D88',
                                         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=7)),
-                                        height=35, # Botón compacto
+                                        height=35,
+                                        # Lógica Código 2: Pasamos el producto entero
                                         on_click=lambda e: on_agregar(producto)
                                     )
                                 ]
                             )
                         ]
                     ),
-                    # Espacio antes de la línea
                     ft.Container(height=10),
-                    # La línea divisoria
                     ft.Divider(height=1, color=ft.Colors.GREY_300)
                 ]
             )
         )
 
-    def _crear_sidebar_tile(self, producto, precio_num):
+    # --- TILES VISUALES (Sidebar / Carrito Editable) ---
+    # Lógica del Código 2 (Inputs editables) con Estética similar al Código 1
+
+    def _crear_sidebar_tile(self, item_carrito):
         """
-        Crea el elemento visual del carrito usando un Row personalizado
-        para evitar que el texto se aplaste verticalmente.
+        item_carrito es dict: {'product': p, 'price': float, 'qty': int}
+        Creamos inputs para editar precio y cantidad (Lógica Cod 2)
         """
-        precio_formateado = f"${precio_num:,.2f}"
-        
-        # Elemento contenedor del producto
+        producto = item_carrito['product']
+        max_stock = producto[6] if len(producto) > 6 else 1
+
+        # Input de Cantidad (Lógica Cod 2)
+        txt_cantidad = ft.TextField(
+            value=str(item_carrito['qty']),
+            width=50,
+            height=30,
+            text_size=13,
+            content_padding=5,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            text_align=ft.TextAlign.CENTER,
+            dense=True,
+            # Estilo minimalista para que encaje
+            border_color=ft.Colors.GREY_400,
+            on_change=lambda e: self._actualizar_cantidad_item(item_carrito, e.control.value, max_stock)
+        )
+
+        # Input de Precio (Lógica Cod 2 - Editable)
+        txt_precio = ft.TextField(
+            value=f"{item_carrito['price']:.2f}",
+            prefix_text="$",
+            width=90,
+            height=30,
+            text_size=13,
+            content_padding=5,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            text_align=ft.TextAlign.RIGHT,
+            dense=True,
+            border_color=ft.Colors.GREY_400,
+            on_change=lambda e: self._actualizar_precio_item(item_carrito, e.control.value)
+        )
+
+        # Contenedor visual (Diseño Cod 1)
         tile_en_sidebar = ft.Container(
             padding=ft.padding.symmetric(vertical=5, horizontal=5),
             border=ft.border.only(bottom=ft.border.BorderSide(1, ft.Colors.GREY_300)),
-            content=ft.Row(
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                controls=[
-                    # IZQUIERDA: Nombre y Código (Usamos expand=True para que ocupe el espacio disponible)
-                    ft.Column(
-                        spacing=2,
-                        expand=True, 
-                        controls=[
-                            ft.Text(
-                                f"{producto[2]}", # Nombre
-                                weight=ft.FontWeight.BOLD, 
-                                size=13,
-                                max_lines=2, # Si es muy largo, usa 2 lineas maximo
-                                overflow=ft.TextOverflow.ELLIPSIS
-                            ),
-                            ft.Text(
-                                f"{producto[3]} gr. | {producto[4]}", # Detalles
-                                size=11, 
-                                color=ft.Colors.GREY_700
-                            ),
-                            ft.Text(
-                                f"Cod: {producto[1]}", # Codigo
-                                size=10, 
-                                color=ft.Colors.GREY_500
-                            ),
-                        ]
+            content=ft.Column([
+                # Fila Superior: Nombre y Botón Eliminar
+                ft.Row([
+                    ft.Text(
+                        f"{producto[2]}", 
+                        weight=ft.FontWeight.BOLD, 
+                        size=13, 
+                        max_lines=2, 
+                        overflow=ft.TextOverflow.ELLIPSIS, 
+                        expand=True
                     ),
-                    
-                    # DERECHA: Precio y Boton Eliminar
-                    ft.Column(
-                        alignment=ft.MainAxisAlignment.CENTER,
-                        horizontal_alignment=ft.CrossAxisAlignment.END,
-                        spacing=0,
-                        controls=[
-                            ft.Text(
-                                precio_formateado, 
-                                size=14, 
-                                weight=ft.FontWeight.BOLD,
-                                color=ft.Colors.BLACK
-                            ),
-                            ft.IconButton(
-                                icon=ft.Icons.DELETE_OUTLINE,
-                                icon_color=ft.Colors.RED_400,
-                                icon_size=20,
-                                tooltip="Quitar del carrito",
-                                on_click=lambda e: self._remover_de_sidebar(producto)
-                            )
-                        ]
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE_OUTLINE,
+                        icon_color=ft.Colors.RED_400,
+                        icon_size=20,
+                        tooltip="Quitar del carrito",
+                        on_click=lambda e: self._remover_de_sidebar(item_carrito)
                     )
-                ]
-            )
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                
+                # Fila Inferior: Detalles y Controles de Edición
+                ft.Row([
+                    ft.Text(f"Cod: {producto[1]}", size=10, color=ft.Colors.GREY_500),
+                    ft.Container(expand=True), # Espaciador
+                    ft.Text("Cant:", size=11, color="grey"),
+                    txt_cantidad,
+                    ft.Container(width=5),
+                    txt_precio
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            ])
         )
         return tile_en_sidebar
-    # --- LÓGICA DE ESTADO (Agregar/Quitar/Subtotal) ---
+
+    # --- LÓGICA DE CARRITO Y EDICIÓN (Código 2) ---
+
+    def _actualizar_cantidad_item(self, item, valor_str, max_stock):
+        try:
+            if not valor_str: return
+            nueva_cant = int(valor_str)
+            
+            if nueva_cant < 1: 
+                nueva_cant = 1
+            
+            if nueva_cant > max_stock:
+                nueva_cant = max_stock
+                self.page.snack_bar = ft.SnackBar(ft.Text(f"Stock máximo es {max_stock}"), bgcolor="red")
+                self.page.snack_bar.open = True
+                self.page.update()
+            
+            item['qty'] = nueva_cant
+        except ValueError:
+            pass 
+        
+        # Recalcular totales y refrescar lista principal (el stock visual cambia)
+        self._actualizar_subtotal()
+        self.actualizar_lista_productos() 
+
+    def _actualizar_precio_item(self, item, valor_str):
+        try:
+            if not valor_str: return
+            nuevo_precio = float(valor_str)
+            item['price'] = nuevo_precio
+        except ValueError:
+            pass
+        self._actualizar_subtotal()
 
     def _actualizar_subtotal(self):
-        total = sum(item[1] for item in self.productos_con_precio_sidebar)
+        # Total es suma de (precio * cantidad) para cada item
+        total = sum(item['price'] * item['qty'] for item in self.carrito)
         self.txt_subtotal.value = f"${total:,.2f}"
         
-        # Habilitar botón y asignar acción con el total actual capturado
         self.btn_continuar.disabled = (total == 0)
         self.btn_continuar.on_click = lambda e: self._abrir_modal_pago(total)
         
@@ -253,58 +305,56 @@ class MainView(ft.View):
         self.btn_continuar.update()
 
     def _agregar_a_sidebar(self, producto):
-        clave = producto[1]
-        if clave in self.productos_en_sidebar_claves:
-            return 
+        # 1. Checar si ya existe en el carrito (Lógica Cod 2)
+        item_existente = next((i for i in self.carrito if i['product'][0] == producto[0]), None)
+        
+        max_stock = producto[6] if len(producto) > 6 else 1
 
-        self.productos_en_sidebar_claves.add(clave)
-        
-        precio_num = self._calcular_precio_numerico(producto)
-        self.productos_con_precio_sidebar.append((producto, precio_num))
+        if item_existente:
+            if item_existente['qty'] < max_stock:
+                item_existente['qty'] += 1
+            else:
+                self.page.snack_bar = ft.SnackBar(ft.Text("No hay más stock disponible"), bgcolor="red")
+                self.page.snack_bar.open = True
+                self.page.update()
+                return 
+        else:
+            # Nuevo item en carrito
+            precio_inicial = self._calcular_precio_numerico(producto)
+            nuevo_item = {
+                'product': producto,
+                'price': precio_inicial,
+                'qty': 1
+            }
+            self.carrito.append(nuevo_item)
 
-        nuevo_tile = self._crear_sidebar_tile(producto, precio_num)
-        self.sidebar_content.controls.append(nuevo_tile)
-        
-        self.sidebar_content.update()
-        self._actualizar_subtotal()
-        self.actualizar_lista_productos() # Para actualizar botones o estado visual si fuera necesario
-
-    # CORRECCIÓN: Faltaba este método
-    def _remover_de_sidebar(self, producto_a_borrar):
-        clave = producto_a_borrar[1]
-        
-        # 1. Quitar del set de claves
-        if clave in self.productos_en_sidebar_claves:
-            self.productos_en_sidebar_claves.remove(clave)
-            
-        # 2. Quitar de la lista de precios (filtro por clave)
-        self.productos_con_precio_sidebar = [
-            item for item in self.productos_con_precio_sidebar 
-            if item[0][1] != clave
-        ]
-        
-        # 3. Reconstruir visualmente la sidebar 
-        # (Es más seguro reconstruirla que buscar el control específico para eliminarlo)
         self._reconstruir_sidebar_visual()
+        self._actualizar_subtotal()
+        self.actualizar_lista_productos()
+
+    def _remover_de_sidebar(self, item_a_borrar):
+        if item_a_borrar in self.carrito:
+            self.carrito.remove(item_a_borrar)
         
+        self._reconstruir_sidebar_visual()
         self._actualizar_subtotal()
         self.actualizar_lista_productos()
 
     def _reconstruir_sidebar_visual(self):
-        """Reconstruye los controles del sidebar basándose en la lista actual"""
         controles_base = [
-            ft.Text("Los productos que escanees o busques aparecerán aquí", size=12),
+            ft.Text("Carrito de Compras", size=14, weight="bold"), # Traducido
+            ft.Text("Precio y cantidad editables", size=10, color="grey"), # Traducido
             ft.Divider(height=1)
         ]
         
         nuevos_tiles = []
-        for prod, precio in self.productos_con_precio_sidebar:
-            nuevos_tiles.append(self._crear_sidebar_tile(prod, precio))
+        for item in self.carrito:
+            nuevos_tiles.append(self._crear_sidebar_tile(item))
             
         self.sidebar_content.controls = controles_base + nuevos_tiles
         self.sidebar_content.update()
 
-    # --- LÓGICA DE PAGO ---
+    # --- LÓGICA DE PAGO Y NAVEGACIÓN (Código 2) ---
 
     def _abrir_modal_pago(self, total):
         empleado_id = self.page.session.get('empleado_id')
@@ -312,35 +362,40 @@ class MainView(ft.View):
             print("Error: No empleado ID")
             return
 
+        # ### ADAPTADOR DE DATOS ###
+        # El manager espera una lista de tuplas [(producto, precio)].
+        # Como ahora tenemos cantidades, debemos "aplanar" la lista.
+        
+        lista_para_manager = []
+        for item in self.carrito:
+            prod = item['product']
+            precio = item['price']
+            qty = item['qty']
+            
+            # Añadir el producto N veces a la lista final
+            for _ in range(qty):
+                lista_para_manager.append((prod, precio))
+
         show_modal_pago(
             self.page, 
-            self.productos_con_precio_sidebar, 
+            lista_para_manager, # Enviamos la lista aplanada
             total, 
             empleado_id, 
-            self._limpiar_despues_venta # CORRECCIÓN: Ahora apunta a una función existente
+            self._limpiar_despues_venta 
         )
 
-    def _evento_boton_continuar(self, e):
-        """Manejador fijo para el botón continuar"""
-        if self.total_actual > 0:
-            self._abrir_modal_pago(self.total_actual)
-        else:
-            # Por seguridad, si el total es 0, no abrimos nada
-            print("Error: El total es 0")
-
-    # CORRECCIÓN: Faltaba este método para limpiar tras venta exitosa
     def _limpiar_despues_venta(self):
-        self.productos_en_sidebar_claves.clear()
-        self.productos_con_precio_sidebar = []
+        self.carrito = [] 
         self._reconstruir_sidebar_visual()
         self._actualizar_subtotal()
-        self.actualizar_lista_productos() # Refresca lista principal (ya sin los vendidos)
+        self.actualizar_lista_productos()
 
-    # --- FILTRADO Y ACTUALIZACIÓN ---
+    # --- FILTRADO Y ACTUALIZACIÓN (Misma lógica, variables adaptadas) ---
 
     def filtrar_productos(self, texto_busqueda="", criterio_orden="nombre"):
         productos = obtener_productos()
         
+        # 1. Filtro de Texto
         if texto_busqueda:
             texto_busqueda = texto_busqueda.lower()
             productos = [
@@ -350,6 +405,7 @@ class MainView(ft.View):
                     texto_busqueda in str(p[5]).lower())
             ]
         
+        # 2. Ordenamiento
         try:
             if criterio_orden == "nombre":
                 productos.sort(key=lambda x: str(x[2]).lower())
@@ -360,19 +416,27 @@ class MainView(ft.View):
         except Exception as e:
             logging.error(f"Error al ordenar: {e}")
             
-        # Filtramos los que ya están en sidebar para que no salgan en la lista principal
-        productos_finales = [
-            p for p in productos
-            if p[1] not in self.productos_en_sidebar_claves
-        ]
+        # 3. Filtro de Disponibilidad (Lógica Cod 2)
+        # Solo mostramos productos que tengan stock visual > 0
+        productos_finales = []
+        for p in productos:
+            en_carrito = 0
+            for item in self.carrito:
+                if item['product'][0] == p[0]:
+                    en_carrito = item['qty']
+                    break
             
+            stock_bd = p[6] if len(p) > 6 else 1
+            
+            if (stock_bd - en_carrito) > 0:
+                productos_finales.append(p)
+                
         return productos_finales
 
     def actualizar_lista_productos(self, texto_busqueda="", criterio_orden="nombre"):
         if not self.lista:
             return
 
-        # Si hay texto en el filtro visual, mantenemos ese criterio
         if self.filter_text:
             if "Kilataje" in self.filter_text.value: criterio_orden = "kilataje"
             elif "Categoria" in self.filter_text.value: criterio_orden = "categoria"
@@ -391,7 +455,7 @@ class MainView(ft.View):
             self.lista.update()
 
     def precios_actualizados(self, e):
-
+        # Guardar precios en DB
         try:
             p_10k = float(self.txt_oro_10k.value) if self.txt_oro_10k.value else 0.0
             p_14k = float(self.txt_oro_14k.value) if self.txt_oro_14k.value else 0.0
@@ -402,23 +466,8 @@ class MainView(ft.View):
         except ValueError:
             pass
 
-        lista_actualizada = []
-        
-        for producto_tuple, _ in self.productos_con_precio_sidebar:
-            # Recalculamos precio con los nuevos valores de los inputs
-            nuevo_precio = self._calcular_precio_numerico(producto_tuple)
-            lista_actualizada.append((producto_tuple, nuevo_precio))
-            
-        # 2. Reemplazamos la lista oficial
-        self.productos_con_precio_sidebar = lista_actualizada
-        
-        # 3. Actualizamos visualmente el Sidebar
-        self._reconstruir_sidebar_visual()
-        
-        # 4. Actualizamos subtotal
-        self._actualizar_subtotal()
-        
-        # 5. Actualizamos la lista principal (los precios de "Agregar" también cambian)
+        # Solo actualizamos la lista principal (sugeridos)
+        # NO sobreescribimos los precios del carrito para respetar ediciones manuales
         self.actualizar_lista_productos()
 
     def on_filter_selected(self, e):
@@ -432,7 +481,7 @@ class MainView(ft.View):
         if self.page:
             self.update()
 
-    # --- INTERFAZ UI ---
+    # --- INTERFAZ UI (Estructura visual exacta del Código 1) ---
 
     def _construir_interfaz(self):
         
@@ -505,6 +554,7 @@ class MainView(ft.View):
                                 width=90,
                                 bgcolor="#FCBF49",
                                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=7)),
+                                on_click=lambda e: show_modal_corte(self.page)
                             )
                         ]
                     ),
