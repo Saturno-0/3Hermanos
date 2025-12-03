@@ -35,11 +35,11 @@ def show_modal_pago(page: ft.Page, productos_con_precio: list, total_venta: floa
         border_radius=10,
     )
 
-    lbl_cambio = ft.Text("$0.00", size=25, weight=ft.FontWeight.BOLD, color=ft.colors.GREY)
+    lbl_cambio = ft.Text("$0.00", size=25, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY)
     
     btn_confirmar_venta = ft.ElevatedButton(
         "Confirmar Venta",
-        icon=ft.icons.CHECK,
+        icon=ft.Icons.CHECK,
         bgcolor=color_verde,
         color="white",
         height=50,
@@ -81,7 +81,7 @@ def show_modal_pago(page: ft.Page, productos_con_precio: list, total_venta: floa
             cambio = monto - total_venta
             
             lbl_cambio.value = f"${cambio:,.2f}"
-            lbl_cambio.color = ft.colors.GREEN if cambio >= 0 else ft.colors.RED
+            lbl_cambio.color = ft.Colors.GREEN if cambio >= 0 else ft.Colors.RED
             
             # Solo permitir venta si cubre el total
             btn_confirmar_venta.disabled = (monto < total_venta)
@@ -150,12 +150,12 @@ def show_modal_pago(page: ft.Page, productos_con_precio: list, total_venta: floa
         value="Efectivo"
     )
 
-    lbl_restante = ft.Text(f"${total_venta:,.2f}", size=20, weight=ft.FontWeight.BOLD, color=ft.colors.ORANGE)
+    lbl_restante = ft.Text(f"${total_venta:,.2f}", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE)
 
     btn_confirmar_apartado = ft.ElevatedButton(
         "Crear Apartado",
-        icon=ft.icons.BOOKMARK_ADD,
-        bgcolor=ft.colors.ORANGE_700,
+        icon=ft.Icons.BOOKMARK_ADD,
+        bgcolor=ft.Colors.ORANGE_700,
         color="white",
         height=50,
         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
@@ -171,15 +171,15 @@ def show_modal_pago(page: ft.Page, productos_con_precio: list, total_venta: floa
 
             if abono <= 0:
                 lbl_restante.value = "Ingresa un abono válido"
-                lbl_restante.color = ft.colors.RED
+                lbl_restante.color = ft.Colors.RED
                 btn_confirmar_apartado.disabled = True
             elif abono >= total_venta:
                 lbl_restante.value = "¡Liquida en Venta Directa!"
-                lbl_restante.color = ft.colors.BLUE
+                lbl_restante.color = ft.Colors.BLUE
                 btn_confirmar_apartado.disabled = True
             else:
                 lbl_restante.value = f"Restan: ${restante:,.2f}"
-                lbl_restante.color = ft.colors.ORANGE
+                lbl_restante.color = ft.Colors.ORANGE
                 btn_confirmar_apartado.disabled = False
         except ValueError:
             btn_confirmar_apartado.disabled = True
@@ -240,7 +240,7 @@ def show_modal_pago(page: ft.Page, productos_con_precio: list, total_venta: floa
             # Éxito
             page.snack_bar = ft.SnackBar(
                 content=ft.Text(f"¡{tipo} #{id_resultado} registrado con éxito!", weight="bold"),
-                bgcolor=ft.colors.GREEN_700,
+                bgcolor=ft.Colors.GREEN_700,
                 duration=4000
             )
             page.snack_bar.open = True
@@ -249,7 +249,7 @@ def show_modal_pago(page: ft.Page, productos_con_precio: list, total_venta: floa
             # Error
             page.snack_bar = ft.SnackBar(
                 content=ft.Text(f"Error al registrar el {tipo}. Intenta de nuevo."),
-                bgcolor=ft.colors.RED_700
+                bgcolor=ft.Colors.RED_700
             )
             page.snack_bar.open = True
         
@@ -262,12 +262,12 @@ def show_modal_pago(page: ft.Page, productos_con_precio: list, total_venta: floa
         tabs=[
             ft.Tab(
                 text="Venta Directa", 
-                icon=ft.icons.MONEY,
+                icon=ft.Icons.MONEY,
                 content=tab_venta
             ),
             ft.Tab(
                 text="Apartado", 
-                icon=ft.icons.BOOKMARK_BORDER,
+                icon=ft.Icons.BOOKMARK_BORDER,
                 content=tab_apartado
             ),
         ],
