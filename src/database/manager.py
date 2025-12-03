@@ -15,7 +15,8 @@ def crear_tablas():
         nombre TEXT NOT NULL,
         peso REAL NOT NULL,
         kilataje TEXT NOT NULL,
-        categoria TEXT NOT NULL
+        categoria TEXT NOT NULL,
+        cantidad INTEGER NOT NULL
     )
     ''')
 
@@ -45,13 +46,22 @@ def crear_tablas():
     CREATE TABLE IF NOT EXISTS detalles_venta (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         venta_id INTEGER NOT NULL,
-        producto_id_original INTEGER, 
+        producto_id INTEGER NOT NULL, 
         nombre TEXT NOT NULL,
         peso REAL NOT NULL,
         kilataje TEXT NOT NULL,
         categoria TEXT NOT NULL,
         precio_venta REAL NOT NULL,
         FOREIGN KEY (venta_id) REFERENCES ventas(id)
+    )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS kilatajes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        diez REAL NOT NULL,
+        catorce REAL NOT NULL,
+        italiano REAL NOT NULL
     )
     ''')
 
@@ -63,7 +73,7 @@ def crear_tablas():
         total_venta REAL NOT NULL,
         total_abonado REAL NOT NULL,
         total_pendiente REAL NOT NULL, 
-        estado TEXT NOT NULL, -- "Pendiente", "Liquidado", "Cancelado"
+        estado TEXT NOT NULL, 
         FOREIGN KEY (empleado_id) REFERENCES empleados(id)
     )
     ''')
@@ -135,6 +145,47 @@ def validar_empleado(nombre: str, password: str):
     conexion.close()
     return resultado if resultado else None
 
+def obtener_precios_oro():
+    """
+    Obtiene los precios actuales. Si no existen, inicializa en 0.
+    Retorna una tupla: (diez, catorce, italiano)
+    """
+    conexion = sqlite3.connect('inventario_joyeria.db')
+    cursor = conexion.cursor()
+    
+    # Intentamos obtener la primera fila (configuración única)
+    cursor.execute("SELECT diez, catorce, italiano FROM kilatajes WHERE id = 1")
+    resultado = cursor.fetchone()
+    
+    if resultado:
+        conexion.close()
+        return resultado
+    else:
+        # Si no existe configuración, creamos la fila inicial en 0
+        cursor.execute("INSERT INTO kilatajes (id, diez, catorce, italiano) VALUES (1, 0.0, 0.0, 0.0)")
+        conexion.commit()
+        conexion.close()
+        return (0.0, 0.0, 0.0)
+
+def actualizar_precio_oro(diez, catorce, italiano):
+    """Actualiza los valores en la base de datos"""
+    conexion = sqlite3.connect('inventario_joyeria.db')
+    cursor = conexion.cursor()
+    try:
+        # Usamos UPDATE asegurando que solo tocamos la fila con id=1
+        cursor.execute('''
+            UPDATE kilatajes 
+            SET diez = ?, catorce = ?, italiano = ? 
+            WHERE id = 1
+        ''', (diez, catorce, italiano))
+        conexion.commit()
+        return True
+    except sqlite3.Error as e:
+        logging.error(f"Error actualizando precios oro: {e}")
+        return False
+    finally:
+        conexion.close()
+
 def obtener_productos():
     """Obtiene todos los productos de la base de datos"""
     conexion = sqlite3.connect('inventario_joyeria.db')
@@ -158,15 +209,15 @@ def obtener_producto_por_clave(clave):
     conexion.close()
     return producto
 
-def agregar_producto(clave, nombre, peso, kilataje, categoria):
+def agregar_producto(clave, nombre, peso, kilataje, categoria, cantidad):
     
     conexion = sqlite3.connect('inventario_joyeria.db')
     cursor = conexion.cursor()
     try:
         cursor.execute('''
-            INSERT INTO productos (clave, nombre, peso, kilataje, categoria)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (clave, nombre, peso, kilataje, categoria))
+            INSERT INTO productos (clave, nombre, peso, kilataje, categoria, cantidad)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (clave, nombre, peso, kilataje, categoria, cantidad))
         conexion.commit()
         return True
     except sqlite3.IntegrityError:
@@ -174,7 +225,7 @@ def agregar_producto(clave, nombre, peso, kilataje, categoria):
     finally:
         conexion.close()
 
-def actualizar_producto(id_producto, clave, nombre, peso, kilataje, categoria):
+def actualizar_producto(id_producto, clave, nombre, peso, kilataje, categoria, cantidad):
     """
     Actualiza un producto existente.
     Las columnas 'marca', 'precio', 'cantidad' y 'codigo_barras' 
@@ -185,9 +236,9 @@ def actualizar_producto(id_producto, clave, nombre, peso, kilataje, categoria):
     try:
         cursor.execute('''
             UPDATE productos 
-            SET clave=? nombre=?, peso=?, kilataje=?, categoria=?
+            SET clave=?, nombre=?, peso=?, kilataje=?, categoria=?, cantidad=?
             WHERE id=?
-        ''', (clave, nombre, peso, kilataje, categoria, id_producto))
+        ''', (clave, nombre, peso, kilataje, categoria, cantidad, id_producto))
         conexion.commit()
         return True
     except sqlite3.IntegrityError:
@@ -195,23 +246,6 @@ def actualizar_producto(id_producto, clave, nombre, peso, kilataje, categoria):
     finally:
         conexion.close()
 
-def obtener_inventario_actual():
-    """
-    Obtiene el inventario actual de productos.
-    Se ajustaron las columnas a 'peso' y 'kilataje'.
-    """
-    conexion = sqlite3.connect('inventario_joyeria.db')
-    cursor = conexion.cursor()
-    
-    cursor.execute('''
-        SELECT id, clave, nombre, peso, kilataje, categoria
-        FROM productos 
-        ORDER BY nombre
-    ''')
-    
-    inventario = cursor.fetchall()
-    conexion.close()
-    return inventario
 
 def eliminar_producto(id_producto):
     conexion = sqlite3.connect('inventario_joyeria.db')
@@ -226,51 +260,50 @@ def eliminar_producto(id_producto):
         conexion.close()
         
 def registrar_venta(empleado_id, productos_vendidos, total, metodo_pago):
-    """
-    Implementa la lógica Opción B:
-    1. Crea la venta.
-    2. Copia los datos del producto a detalles_venta.
-    3. BORRA el producto de la tabla productos.
-    """
-    conexion = sqlite3.connect('inventario_joyeria.db')
+    conexion = sqlite3.connect("inventario_joyeria.db")
     cursor = conexion.cursor()
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     try:
-        # 1. Registrar Venta Maestra
+        # 1. Registrar Venta Maestra (Igual)
         cursor.execute('''
             INSERT INTO ventas (fecha, total, empleado_id, metodo_pago)
             VALUES (?, ?, ?, ?)
         ''', (fecha_actual, total, empleado_id, metodo_pago))
-        
         venta_id = cursor.lastrowid
         
         # 2. Procesar cada producto
         for producto_tuple, precio_final in productos_vendidos:
-            # Desempaquetamos la tupla original de la BD
-            # (id, clave, nombre, peso, kilataje, categoria)
+            # producto_tuple: (0:id, 1:clave, 2:nombre, 3:peso, 4:kilataje, 5:categoria, 6:cantidad)
             p_id = producto_tuple[0]
-            p_nombre = producto_tuple[2]
-            p_peso = producto_tuple[3]
-            p_kilataje = producto_tuple[4]
-            p_categoria = producto_tuple[5]
             
-            # A) Guardamos la "FOTO" en el historial (Detalle)
+            # A) Guardar historial (Igual)
             cursor.execute('''
                 INSERT INTO detalles_venta 
                 (venta_id, producto_id_original, nombre, peso, kilataje, categoria, precio_venta)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (venta_id, p_id, p_nombre, p_peso, p_kilataje, p_categoria, precio_final))
+            ''', (venta_id, p_id, producto_tuple[2], producto_tuple[3], producto_tuple[4], producto_tuple[5], precio_final))
             
-            # B) BORRAMOS el producto del inventario actual
-            cursor.execute("DELETE FROM productos WHERE id = ?", (p_id,))
+            # B) LÓGICA HÍBRIDA: RESTAR O ELIMINAR
+            # Primero verificamos la cantidad actual en la base de datos (por si se vendió otro mientras tanto)
+            cursor.execute("SELECT cantidad FROM productos WHERE id = ?", (p_id,))
+            resultado = cursor.fetchone()
+            
+            if resultado:
+                stock_actual = resultado[0]
+                if stock_actual > 1:
+                    # Si hay muchos, restamos 1
+                    cursor.execute("UPDATE productos SET cantidad = cantidad - 1 WHERE id = ?", (p_id,))
+                else:
+                    # Si queda 1 (o menos), lo borramos del inventario
+                    cursor.execute("DELETE FROM productos WHERE id = ?", (p_id,))
         
         conexion.commit()
         return venta_id
     
     except sqlite3.Error as e:
         conexion.rollback()
-        logging.error(f"Error fatal en venta (Rollback realizado): {e}")
+        logging.error(f"Error fatal en venta: {e}")
         return None
     finally:
         conexion.close()
@@ -333,6 +366,7 @@ def registrar_apartado(empleado_id, productos_apartados, total_venta, abono_inic
     finally:
         conexion.close()
 
+
 def obtener_ventas_del_dia():
     """
     Obtiene todas las ventas del día actual
@@ -356,124 +390,6 @@ def obtener_ventas_del_dia():
     ventas = cursor.fetchall()
     conexion.close()
     return ventas
-
-def obtener_detalle_venta(venta_id):
-    """
-    Obtiene los detalles de una venta específica.
-    Se cambió 'p.marca' por 'p.kilataje'.
-    
-    Args:
-        venta_id: ID de la venta
-        
-    Returns:
-        Lista de tuplas con los detalles de la venta
-    """
-    conexion = sqlite3.connect('inventario_joyeria.db')
-    cursor = conexion.cursor()
-    
-    cursor.execute('''
-        SELECT p.nombre, p.kilataje, dv.cantidad, dv.precio_unitario, (dv.cantidad * dv.precio_unitario) as subtotal
-        FROM detalles_venta dv
-        JOIN productos p ON dv.producto_id = p.id
-        WHERE dv.venta_id = ?
-    ''', (venta_id,))
-    
-    detalles = cursor.fetchall()
-    conexion.close()
-    return detalles
-
-def obtener_ventas_por_empleado_hoy():
-    """
-    Obtiene el total de ventas por empleado para el día actual
-    
-    Returns:
-        Lista de tuplas (nombre_empleado, total_ventas)
-    """
-    conexion = sqlite3.connect('inventario_joyeria.db')
-    cursor = conexion.cursor()
-    
-    fecha_actual = datetime.now().strftime("%Y-%m-%d")
-    
-    cursor.execute('''
-        SELECT e.nombre, SUM(v.total) as total_ventas
-        FROM ventas v
-        JOIN empleados e ON v.empleado_id = e.id
-        WHERE v.fecha = ?
-        GROUP BY v.empleado_id
-        ORDER BY total_ventas DESC
-    ''', (fecha_actual,))
-    
-    ventas_por_empleado = cursor.fetchall()
-    conexion.close()
-    return ventas_por_empleado
-
-def obtener_total_ventas_hoy():
-    """
-    Obtiene el total de todas las ventas del día
-    
-    Returns:
-        Valor total de ventas
-    """
-    conexion = sqlite3.connect('inventario_joyeria.db')
-    cursor = conexion.cursor()
-    
-    fecha_actual = datetime.now().strftime("%Y-%m-%d")
-    
-    cursor.execute('''
-        SELECT SUM(total) as total_ventas
-        FROM ventas
-        WHERE fecha = ?
-    ''', (fecha_actual,))
-    
-    resultado = cursor.fetchone()
-    conexion.close()
-    
-    return resultado[0] if resultado and resultado[0] else 0.0
-
-def exportar_ventas_csv():
-    """
-    Genera los datos para exportar las ventas del día a CSV
-    
-    Returns:
-        Datos de ventas formateados para CSV
-    """
-    # Primero obtenemos la lista de ventas del día
-    ventas = obtener_ventas_del_dia()
-    
-    # Cabecera para el CSV
-    datos_csv = [["ID Venta", "Total", "Empleado"]]
-    
-    # Añadimos cada venta
-    for venta in ventas:
-        datos_csv.append([str(venta[0]), str(venta[1]), venta[2]])
-    
-    return datos_csv
-
-def exportar_inventario_csv():
-    """
-    Genera los datos para exportar el inventario actual a CSV.
-    Se ajustaron las cabeceras y los datos a las columnas de la tabla.
-    
-    Returns:
-        Datos de inventario formateados para CSV
-    """
-    # Obtenemos el inventario actual
-    inventario = obtener_inventario_actual() # (id, nombre, peso, kilataje, categoria)
-    
-    # Cabecera para el CSV (ajustada)
-    datos_csv = [["ID", "Producto", "Peso", "Kilataje", "Categoría"]]
-    
-    # Añadimos cada producto (ajustado)
-    for producto in inventario:
-        datos_csv.append([
-            str(producto[0]),   # ID
-            producto[1],        # Producto (nombre)
-            str(producto[2]),   # Peso
-            str(producto[3]),   # Kilataje
-            producto[4]         # Categoría
-        ])
-    
-    return datos_csv
 
 # Crear tablas al importar este módulo
 crear_tablas()

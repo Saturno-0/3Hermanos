@@ -1,8 +1,7 @@
 import flet as ft
 from modals.modal_crud_producto import show_modal_editar_producto
 from modals.modal_pago import show_modal_pago
-from database.manager import obtener_productos
-from datetime import datetime
+from database.manager import obtener_productos, obtener_precios_oro, actualizar_precio_oro
 import logging
 
 class MainView(ft.View):
@@ -95,29 +94,84 @@ class MainView(ft.View):
         kilataje = producto[4]
         categoria = producto[5]
         clave = producto[1]
+        cantidad_stock = producto[6] if len(producto) > 6 else 1
         
-        return ft.Column(
-            controls=[
-                ft.ListTile(
-                    content_padding=ft.padding.all(15),
-                    leading=ft.Column([
-                        ft.Text(f"{nombre} | {peso_str} gr. | {kilataje}", weight=ft.FontWeight.BOLD, color='Black', size=20),
-                        ft.Text(f"Categoría: {categoria}    Clave: {clave}", weight=ft.FontWeight.NORMAL, size=15, selectable=True),  
-                    ]),
-                    title=ft.Container(
-                        ft.Text(f"Precio: {texto_precio}", size=15, weight=ft.FontWeight.BOLD), 
-                        alignment=ft.alignment.center_right,
+        # Si es más de 1, mostramos etiqueta de stock
+        texto_stock = ""
+        color_stock = ft.Colors.BLACK
+        
+        if cantidad_stock > 1:
+            texto_stock = f"Stock: {cantidad_stock}"
+            color_stock = ft.Colors.BLUE_GREY
+        else:
+            texto_stock = "Pieza Única"
+            color_stock = ft.Colors.ORANGE_400
+        
+        return ft.Container(
+            padding=ft.padding.all(10),
+            # Opcional: un color de fondo al pasar el mouse o siempre
+            # bgcolor=ft.Colors.WHITE, 
+            content=ft.Column(
+                spacing=0,
+                controls=[
+                    ft.Row(
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.START, # Alinea todo arriba
+                        controls=[
+                            # --- COLUMNA IZQUIERDA (Información) ---
+                            ft.Column(
+                                spacing=2,
+                                expand=True, # IMPORTANTE: Ocupa todo el espacio posible
+                                controls=[
+                                    ft.Text(
+                                        f"{nombre} | {peso_str} gr. | {kilataje}", 
+                                        weight=ft.FontWeight.BOLD, 
+                                        color='Black', 
+                                        size=20 # Un poco más chico para que quepa mejor, o 18
+                                    ),
+                                    ft.Text(
+                                        f"Categoría: {categoria} - Clave: {clave}", 
+                                        size=15, 
+                                        selectable=True,
+                                        color=ft.Colors.GREY_700
+                                    ),
+                                    ft.Text(
+                                        texto_stock, 
+                                        size=12, 
+                                        weight=ft.FontWeight.BOLD, 
+                                        color=color_stock
+                                    )
+                                ]
+                            ),
+                            
+                            # --- COLUMNA DERECHA (Precio y Botón) ---
+                            ft.Column(
+                                horizontal_alignment=ft.CrossAxisAlignment.END,
+                                spacing=5,
+                                controls=[
+                                    ft.Text(
+                                        f"Precio: {texto_precio}", 
+                                        size=15, 
+                                        weight=ft.FontWeight.BOLD
+                                    ),
+                                    ft.ElevatedButton(
+                                        "Agregar",
+                                        color='Black',
+                                        bgcolor='#C39D88',
+                                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=7)),
+                                        height=35, # Botón compacto
+                                        on_click=lambda e: on_agregar(producto)
+                                    )
+                                ]
+                            )
+                        ]
                     ),
-                    trailing=ft.ElevatedButton(
-                        "Agregar",
-                        color='Black',
-                        bgcolor='#C39D88',
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=7)),
-                        on_click=lambda e: on_agregar(producto)
-                    )
-                ),
-                ft.Divider(height=1, color=ft.Colors.GREY_400)
-            ]
+                    # Espacio antes de la línea
+                    ft.Container(height=10),
+                    # La línea divisoria
+                    ft.Divider(height=1, color=ft.Colors.GREY_300)
+                ]
+            )
         )
 
     def _crear_sidebar_tile(self, producto, precio_num):
@@ -320,8 +374,8 @@ class MainView(ft.View):
 
         # Si hay texto en el filtro visual, mantenemos ese criterio
         if self.filter_text:
-             if "Kilataje" in self.filter_text.value: criterio_orden = "kilataje"
-             elif "Categoria" in self.filter_text.value: criterio_orden = "categoria"
+            if "Kilataje" in self.filter_text.value: criterio_orden = "kilataje"
+            elif "Categoria" in self.filter_text.value: criterio_orden = "categoria"
 
         productos = self.filtrar_productos(texto_busqueda, criterio_orden)
         
@@ -337,15 +391,17 @@ class MainView(ft.View):
             self.lista.update()
 
     def precios_actualizados(self, e):
-        """
-        CORRECCIÓN CRÍTICA: 
-        1. Recalcula precios numéricos de items en sidebar.
-        2. Actualiza la lista interna self.productos_con_precio_sidebar.
-        3. Actualiza visualmente el sidebar y la lista principal.
-        """
-        
-        # 1. Recuperamos los productos que están en sidebar (desde DB o memoria)
-        # Nota: Usamos la lista actual de sidebar para preservar el orden y objetos
+
+        try:
+            p_10k = float(self.txt_oro_10k.value) if self.txt_oro_10k.value else 0.0
+            p_14k = float(self.txt_oro_14k.value) if self.txt_oro_14k.value else 0.0
+            p_ita = float(self.txt_italiano.value) if self.txt_italiano.value else 0.0
+            
+            actualizar_precio_oro(p_10k, p_14k, p_ita)
+            
+        except ValueError:
+            pass
+
         lista_actualizada = []
         
         for producto_tuple, _ in self.productos_con_precio_sidebar:
@@ -380,23 +436,31 @@ class MainView(ft.View):
 
     def _construir_interfaz(self):
         
+        precios = obtener_precios_oro()
+
         self.txt_oro_10k = ft.TextField(
+            value=str(precios[0]),
+            label="Oro 10K",
             bgcolor="CCCCCC",
             height=40, width=150, border_radius=7, 
             prefix_text="$", suffix_text="/gr",
-            on_change=self.precios_actualizados
+            on_blur=self.precios_actualizados
         )
         self.txt_oro_14k = ft.TextField(
+            value=str(precios[1]),
+            label="Oro 14K",
             bgcolor="CCCCCC",
             height=40, width=150, border_radius=7, 
             prefix_text="$", suffix_text="/gr",
-            on_change=self.precios_actualizados
+            on_blur=self.precios_actualizados
         )
         self.txt_italiano = ft.TextField(
+            value=str(precios[2]),
+            label="Oro Italiano",
             bgcolor="CCCCCC",
             height=40, width=150, border_radius=7, 
             prefix_text="$", suffix_text="/gr",
-            on_change=self.precios_actualizados
+            on_blur=self.precios_actualizados
         )
 
         appbar = ft.AppBar(
@@ -415,13 +479,11 @@ class MainView(ft.View):
             actions=[
                 ft.Container(
                     content=ft.Row(
+                        spacing=20,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         controls=[
-                            ft.Text("Oro 10k:", font_family="Poppins Medium", size=12),
                             self.txt_oro_10k,
-                            ft.Text("Oro 14k:", font_family="Poppins Medium", size=12),
                             self.txt_oro_14k,
-                            ft.Text("Italiano:",font_family="Poppins Medium", size=12),
                             self.txt_italiano,
                         ]
                     )
