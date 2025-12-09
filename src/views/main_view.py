@@ -25,10 +25,7 @@ class MainView(ft.View):
         self.carrito = [] 
         
         self.sidebar_content = ft.Column(
-            controls=[
-                ft.Text("Los productos que escanees o busques aparecerán aquí", size=12),
-                ft.Divider(height=1)
-            ],
+            controls=[],
             scroll="auto",
             expand=True
         )
@@ -54,6 +51,8 @@ class MainView(ft.View):
         )
         
         self._construir_interfaz()
+
+        self._reconstruir_sidebar_visual()
         self.actualizar_lista_productos()
 
     # --- LÓGICA DE PRECIOS (Código 2) ---
@@ -184,6 +183,41 @@ class MainView(ft.View):
 
     # --- TILES VISUALES (Sidebar / Carrito Editable) ---
     # Lógica del Código 2 (Inputs editables) con Estética similar al Código 1
+
+
+    def _accion_nuevo_producto_sidebar(self):
+        """
+        Abre el modal para crear producto. 
+        Al guardar, detecta el último producto creado y lo agrega al carrito.
+        """
+        def al_guardar_producto():
+            # 1. Actualizamos la lista principal (obligatorio)
+            self.actualizar_lista_productos()
+            
+            # 2. Buscamos el producto más nuevo (el que tiene el ID más alto)
+            try:
+                todos_los_productos = obtener_productos()
+                if todos_los_productos:
+                    # Asumiendo que la tupla es (id, clave, nombre...), el ID es el índice 0
+                    # La función max busca el ID mayor
+                    ultimo_producto = max(todos_los_productos, key=lambda p: p[0])
+                    
+                    # 3. Lo agregamos al carrito automáticamente
+                    self._agregar_a_sidebar(ultimo_producto)
+                    
+                    # 4. Feedback visual
+                    self.page.snack_bar = ft.SnackBar(
+                        content=ft.Text(f"¡{ultimo_producto[2]} creado y agregado!"), 
+                        bgcolor="green",
+                        duration=2000
+                    )
+                    self.page.snack_bar.open = True
+                    self.page.update()
+            except Exception as e:
+                logging.error(f"Error en auto-agregar: {e}")
+
+        # Abrimos el modal pasándole nuestro callback especial
+        show_modal_editar_producto(self.page, al_guardar_producto)
 
     def _crear_sidebar_tile(self, item_carrito):
         """
@@ -341,20 +375,43 @@ class MainView(ft.View):
         self.actualizar_lista_productos()
 
     def _reconstruir_sidebar_visual(self):
-        controles_base = [
-            ft.Text("Carrito de Compras", size=14, weight="bold"), # Traducido
-            ft.Text("Precio y cantidad editables", size=10, color="grey"), # Traducido
-            ft.Divider(height=1)
-        ]
+        """Reconstruye TODA la sidebar (Cabecera + Items)"""
         
+        # --- 1. Crear la Cabecera con el Botón "+" ---
+        cabecera = ft.Column(
+            spacing=0,
+            controls=[
+                ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.Text("Carrito de Compras", size=14, weight="bold"),
+                        # BOTÓN NUEVO AQUÍ
+                        ft.IconButton(
+                            icon=ft.Icons.ADD_CIRCLE,
+                            icon_color="green",
+                            tooltip="Crear y agregar producto rápido",
+                            icon_size=24,
+                            on_click=lambda e: self._accion_nuevo_producto_sidebar()
+                        )
+                    ]
+                ),
+                ft.Text("Precio y cantidad editables", size=10, color="grey"),
+                ft.Divider(height=1, color=ft.Colors.GREY_300)
+            ]
+        )
+        
+        # --- 2. Crear los tiles de productos ---
         nuevos_tiles = []
         for item in self.carrito:
             nuevos_tiles.append(self._crear_sidebar_tile(item))
             
-        self.sidebar_content.controls = controles_base + nuevos_tiles
-        self.sidebar_content.update()
+        # --- 3. Juntar todo ---
+        # La lista de controles es: [Cabecera] + [Lista de Productos]
+        self.sidebar_content.controls = [cabecera] + nuevos_tiles
 
-    # --- LÓGICA DE PAGO Y NAVEGACIÓN (Código 2) ---
+        if self.sidebar_content.page:
+            self.sidebar_content.update()
 
     def _abrir_modal_pago(self, total):
         empleado_id = self.page.session.get('empleado_id')
