@@ -1,10 +1,23 @@
-import win32print
 import datetime
+
+try:
+    import win32print
+except Exception:
+    win32print = None
+
+# Deshabilita impresión en sistemas sin win32print (ej. Linux durante desarrollo)
+def _ensure_printer():
+    if win32print is None:
+        print("Impresión deshabilitada: win32print no está disponible en este sistema.")
+        return False
+    return True
 
 # --- CONFIGURACIÓN ---
 NOMBRE_IMPRESORA = "POS-58"
 
 def imprimir_ticket_venta(folio, fecha, productos, total, metodo_pago, recibio, cambio, cliente_nombre, cliente_numero, cliente_direccion, titulo_ticket="*** ORIGINAL CLIENTE ***"):
+    if not _ensure_printer():
+        return False
     
     # --- COMANDOS ESC/POS ---
     INIT = b'\x1b@'
@@ -162,6 +175,8 @@ def imprimir_ticket_venta(folio, fecha, productos, total, metodo_pago, recibio, 
         return False
     
 def imprimir_ticket_apartado(folio, fecha, productos, total, abono_inicial, restante, cliente_nombre, titulo_ticket="*** TICKET APARTADO ***"):
+    if not _ensure_printer():
+        return False
         # --- COMANDOS ESC/POS ---
     INIT = b'\x1b@'
     ALIGN_CENTER = b'\x1ba\x01'
@@ -266,6 +281,8 @@ def imprimir_ticket_apartado(folio, fecha, productos, total, abono_inicial, rest
         return False
     
 def imprimir_corte_caja(ventas_empleado, total_dia, detalle_productos):
+    if not _ensure_printer():
+        return False
     """
     Imprime el reporte de cierre de día.
     """
@@ -337,6 +354,8 @@ def imprimir_corte_caja(ventas_empleado, total_dia, detalle_productos):
         return False
 
 def imprimir_inventario(lista_productos):
+    if not _ensure_printer():
+        return False
     """
     Imprime lista simple de inventario.
     lista_productos: [(id, clave, nombre, peso, kilataje, cat, stock)]
