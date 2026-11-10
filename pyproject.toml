@@ -5,7 +5,7 @@ description = ""
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
-    { name = "Rodrigo Salgado", email = "rst020514@gmail.com" }
+    { name = "Saturno-0" }
 ]
 dependencies = [
   "flet==0.27.6"
